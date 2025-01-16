@@ -1,0 +1,15 @@
+{
+  "name": "clubhouse",
+  "version": "1.0.0",
+  "description": "Clubhouse Utility & Game Smart Contracts",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Neela Mediatech Private Limited",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.18"
+  }
+}
