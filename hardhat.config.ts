@@ -9,6 +9,9 @@ dotenv.config();
 
 const config: HardhatUserConfig = {
   networks: {
+    localhost: {
+      url: "http://127.0.0.1:8545"
+    },
     hardhat: {      
     },
     mainnet: {
@@ -34,8 +37,18 @@ const config: HardhatUserConfig = {
       accounts: [process.env.WALLET_PRIVATE_KEY || ""],
     },
     bnb: {
-      url: `https://bsc-dataseed.binance.org/`,
+      url: `https://bsc-dataseed.binance.org/${process.env.INFURA_API_KEY}`,
       accounts: [process.env.WALLET_PRIVATE_KEY || ""],
+    },
+    sepolia: {
+      url:`https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`,
+      accounts: {
+        mnemonic: "test test test test test test test test test test test junk",
+        path: "m/44'/60'/0'/0",
+        initialIndex: 0,
+        count: 20,
+        passphrase: "",
+      },
     },
     polygonAmoyTestnet: {
       url: "https://rpc-amoy.polygon.technology",
