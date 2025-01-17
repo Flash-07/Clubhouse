@@ -26,6 +26,7 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
     event WithdrawalWithSignature(address indexed user, uint256 amount, uint256 nonce);
     event TournamentFeesCollected(uint256 amount);
     event TournamentFeesWithdrawn(address indexed admin, uint256 amount);
+    event DebugRecoveredSigner(address recoveredSigner);
     // event EmergencyWithdrawal(address indexed to, uint256 amount);
     // event TrustedSignerUpdated(address indexed oldSigner, address indexed newSigner);
 
@@ -175,6 +176,7 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
 
         // Recover the signer using ECDSA.recover
         address signer = ECDSA.recover(ethSignedHash, signature);
+        emit DebugRecoveredSigner(signer); // Log recovered signer
         require(signer == trustedSigner, "Invalid signature");
 
         require(tmkocToken.transfer(msg.sender, amount), "Transfer failed");

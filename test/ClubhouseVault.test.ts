@@ -107,81 +107,99 @@ import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
  */
 function arrayify(hex: string): Uint8Array {
     if (!hex.startsWith("0x") || hex.length !== 66) {
-      throw new Error("Invalid bytes32 value");
+        throw new Error("Invalid bytes32 value");
     }
     return Uint8Array.from(Buffer.from(hex.slice(2), "hex"));
-  }
+}
 
 describe("ClubhouseVault", function () {
-  async function deployFixtures() {
-    // Deploy TMKOC token
-    const TMKOC = await ethers.getContractFactory("TaarakMehtaKaOoltahChashmash");
-    const tmkoc = await TMKOC.deploy("TaarakMehtaKaOoltah", "TMKOC", ethers.parseEther("1000000"));
+    async function deployFixtures() {
+        // Deploy TMKOC token
+        const TMKOC = await ethers.getContractFactory("TaarakMehtaKaOoltahChashmash");
+        const tmkoc = await TMKOC.deploy("TaarakMehtaKaOoltah", "TMKOC", ethers.parseEther("1000000"));
 
-    // Deploy ClubhouseVault
-    const Vault = await ethers.getContractFactory("ClubhouseVault");
-    const vault = await Vault.deploy(tmkoc.getAddress());
+        // Deploy ClubhouseVault
+        const Vault = await ethers.getContractFactory("ClubhouseVault");
+        const vault = await Vault.deploy(tmkoc.getAddress());
 
-    // Grab signers
-    const [deployer, user, trustedSigner] = await ethers.getSigners();
+        // Grab signers
+        const [deployer, user, trustedSigner] = await ethers.getSigners();
 
-    // Set the trustedSigner in the vault
-    await vault.setTrustedSigner(trustedSigner.address);
+        // Set the trustedSigner in the vault
+        await vault.setTrustedSigner(trustedSigner.address);
 
-    return { tmkoc, vault, deployer, user, trustedSigner };
-  }
+        return { tmkoc, vault, deployer, user, trustedSigner };
+    }
 
-  it("should deposit tokens, generate a withdraw signature hash, and withdraw with signature", async function () {
-    const { tmkoc, vault, user, trustedSigner } = await deployFixtures();
+    it("should deposit tokens, generate a withdraw signature hash, and withdraw with signature", async function () {
+        const { tmkoc, vault, user, trustedSigner } = await deployFixtures();
 
-    // Step 1: Transfer tokens to user
-    await tmkoc.transfer(user.address, ethers.parseEther("1000"));
+        // Step 1: Transfer tokens to user
+        await tmkoc.transfer(user.address, ethers.parseEther("1000"));
 
-    // Step 2: Approve the vault
-    await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
+        // Step 2: Approve the vault
+        await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
 
-    // Step 3: Deposit tokens
-    await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+        // Step 3: Deposit tokens
+        await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+        const vaultBalanceAfterDeposit = await vault.contractBalance();
+        expect(vaultBalanceAfterDeposit).to.equal(ethers.parseEther("500"));
 
-    // Step 4: Generate the withdraw signature hash
-    const amount = ethers.parseEther("100");
-    const nonce = 1;
-    const expiry = (await time.latest()) + 60 * 60; // 1 hour from now
-    const messageHash = await vault.getWithdrawWithSignatureHash(user.address, amount, nonce, expiry);
+        // Step 4: Generate the withdraw signature hash
+        const amount = ethers.parseEther("100");
+        const nonce = 1;
+        const expiry = (await time.latest()) + 60 * 60; // 1 hour from now
+        const messageHash = await vault.getWithdrawWithSignatureHash(user.address, amount, nonce, expiry);
 
-    // Step 5: Sign the hash with the trusted signer
-    const signature = await trustedSigner.signMessage(arrayify(messageHash));
+        // Log for debugging
+        console.log("Message Hash:", messageHash);
 
-    // Step 6: Call withdrawWithSignature
-    await vault.connect(user).withdrawWithSignature(amount, nonce, expiry, signature);
+        // Step 5: Sign the hash with the trusted signer
+        const signature = await trustedSigner.signMessage(arrayify(messageHash));
+        console.log("Signature:", signature);
 
-    // Check user balance
-    const userBalance = await tmkoc.balanceOf(user.address);
-    expect(userBalance).to.equal(ethers.parseEther("600"));
+        // Log signer address for debugging
+        console.log("Trusted Signer Address:", trustedSigner.address);
 
-    // Check vault balance
-    const vaultBalance = await vault.contractBalance();
-    expect(vaultBalance).to.equal(ethers.parseEther("400"));
-  });
+        // Step E: Sign the prefixed hash
+        const ethSignedHash = ethers.hashMessage(messageHash); // Adds Ethereum Signed Message prefix
+        const signature1 = await trustedSigner.signMessage(arrayify(ethSignedHash));
 
-  it("should fail if signature is invalid", async function () {
-    const { tmkoc, vault, user } = await deployFixtures();
+        // Debugging
+        console.log("Ethereum Signed Hash:", ethSignedHash);
+        console.log("Signature:", signature1);
+        console.log("Trusted Signer Address:", trustedSigner.address);
 
-    // Transfer tokens, approve, and deposit
-    await tmkoc.transfer(user.address, ethers.parseEther("1000"));
-    await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
-    await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+        // Step 6: Call withdrawWithSignature
+        await vault.connect(user).withdrawWithSignature(amount, nonce, expiry, signature);
 
-    // Try invalid signature
-    const amount = ethers.parseEther("200");
-    const nonce = 2;
-    const expiry = (await time.latest()) + 60 * 60;
-    const messageHash = await vault.getWithdrawWithSignatureHash(user.address, amount, nonce, expiry);
-    const invalidSignature = await user.signMessage(arrayify(messageHash));
+        // Check user balance
+        const userBalance = await tmkoc.balanceOf(user.address);
+        expect(userBalance).to.equal(ethers.parseEther("600"));
 
-    await expect(
-      vault.connect(user).withdrawWithSignature(amount, nonce, expiry, invalidSignature)
-    ).to.be.revertedWith("Invalid signature");
-  });
+        // Check vault balance
+        const vaultBalance = await vault.contractBalance();
+        expect(vaultBalance).to.equal(ethers.parseEther("400"));
+    });
+
+    it("should fail if signature is invalid", async function () {
+        const { tmkoc, vault, user } = await deployFixtures();
+
+        // Transfer tokens, approve, and deposit
+        await tmkoc.transfer(user.address, ethers.parseEther("1000"));
+        await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
+        await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+
+        // Try invalid signature
+        const amount = ethers.parseEther("200");
+        const nonce = 2;
+        const expiry = (await time.latest()) + 60 * 60;
+        const messageHash = await vault.getWithdrawWithSignatureHash(user.address, amount, nonce, expiry);
+        const invalidSignature = await user.signMessage(arrayify(messageHash));
+
+        await expect(
+            vault.connect(user).withdrawWithSignature(amount, nonce, expiry, invalidSignature)
+        ).to.be.revertedWith("Invalid signature");
+    });
 });
 
