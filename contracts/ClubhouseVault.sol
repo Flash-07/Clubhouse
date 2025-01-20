@@ -27,6 +27,9 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
     event TournamentFeesCollected(uint256 amount);
     event TournamentFeesWithdrawn(address indexed admin, uint256 amount);
     event DebugRecoveredSigner(address recoveredSigner);
+    event DebugMessageHash(bytes32 messageHash);
+    event DebugEthSignedHash(bytes32 ethSignedHash);
+
     // event EmergencyWithdrawal(address indexed to, uint256 amount);
     // event TrustedSignerUpdated(address indexed oldSigner, address indexed newSigner);
 

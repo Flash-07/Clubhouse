@@ -152,7 +152,7 @@ describe("ClubhouseVault", function () {
         const messageHash = await vault.getWithdrawWithSignatureHash(user.address, amount, nonce, expiry);
 
         // Log for debugging
-        console.log("Message Hash:", messageHash);
+        console.log("a Hash:", messageHash);
 
         // Step 5: Sign the hash with the trusted signer
         const signature = await trustedSigner.signMessage(arrayify(messageHash));
@@ -162,13 +162,12 @@ describe("ClubhouseVault", function () {
         console.log("Trusted Signer Address:", trustedSigner.address);
 
         // Step E: Sign the prefixed hash
-        const ethSignedHash = ethers.hashMessage(messageHash); // Adds Ethereum Signed Message prefix
+        const ethSignedHash = ethers.hashMessage(arrayify(messageHash)); // Adds Ethereum Signed Message prefix
         const signature1 = await trustedSigner.signMessage(arrayify(ethSignedHash));
 
         // Debugging
         console.log("Ethereum Signed Hash:", ethSignedHash);
-        console.log("Signature:", signature1);
-        console.log("Trusted Signer Address:", trustedSigner.address);
+        console.log("Signature1:", signature1);
 
         // Step 6: Call withdrawWithSignature
         await vault.connect(user).withdrawWithSignature(amount, nonce, expiry, signature);
