@@ -20,10 +20,15 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
     uint256 public totalTournamentFees; // Tracks total tournament fees collected
     mapping(address => uint256) public depositedTokens;
     mapping(uint256 => bool) public usedNonces;
+    mapping(address => bool) validSigners;
 
     event TokensDeposited(address indexed user, uint256 amount);
     event WinningWithdrawn(address indexed user, uint256 amount);
-    event WithdrawalWithSignature(address indexed user, uint256 amount, uint256 nonce);
+    event WithdrawalWithSignature(
+        address indexed user,
+        uint256 amount,
+        uint256 nonce
+    );
     event TournamentFeesCollected(uint256 amount);
     event TournamentFeesWithdrawn(address indexed admin, uint256 amount);
     event DebugRecoveredSigner(address recoveredSigner);
@@ -35,7 +40,10 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
 
     // Multi-sig events
     event EmergencyWithdrawal(address indexed to, uint256 amount);
-    event TrustedSignerUpdated(address indexed oldSigner, address indexed newSigner);
+    event TrustedSignerUpdated(
+        address indexed oldSigner,
+        address indexed newSigner
+    );
     event MultiSigOwnersUpdated(address[] newOwners, uint256 minApprovals);
 
     constructor(address _tokenAddress) Ownable(msg.sender) {
@@ -46,13 +54,16 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
      * @dev Sets the addresses for multi-sig owners and the minimum approvals needed.
      *      Callable only by the primary owner (from Ownable).
      */
-    function setMultiSigOwners(address[] calldata owners, uint256 _minApprovals) 
-        external 
-        onlyOwner 
-    {
+    function setMultiSigOwners(
+        address[] calldata owners,
+        uint256 _minApprovals
+    ) external onlyOwner {
         require(owners.length > 0, "No owners provided");
-        require(_minApprovals > 0 && _minApprovals <= owners.length, "Invalid minApprovals");
-        
+        require(
+            _minApprovals > 0 && _minApprovals <= owners.length,
+            "Invalid minApprovals"
+        );
+
         // In practice, you'd likely clean up old owners or handle carefully
         multiSigOwners = owners;
         minApprovals = _minApprovals;
@@ -80,7 +91,7 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
     }
 
     // Deposit Tokens
-    function deposit(address caller, uint256 amount) external nonReentrant{
+    function deposit(address caller, uint256 amount) external nonReentrant {
         require(amount > 0, "Amount must be greater than 0");
         require(caller != address(0), "Invalid recipient address");
         bool success = tmkocToken.transferFrom(caller, address(this), amount);
@@ -97,7 +108,10 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
     }
 
     // Withdraw Tournament Tokens
-    function withdrawTournamentFees(address to, uint256 amount) external onlyOwner nonReentrant {
+    function withdrawTournamentFees(
+        address to,
+        uint256 amount
+    ) external onlyOwner nonReentrant {
         require(amount > 0, "Amount must be greater than 0");
         require(amount <= totalTournamentFees, "Insufficient tournament fees");
         totalTournamentFees -= amount;
@@ -107,10 +121,13 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
     }
 
     // Helper function to convert a hash to Ethereum signed message hash
-    function toEthSignedMessageHash(bytes32 hash) internal pure returns (bytes32) {
-        return keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", hash)
-        );
+    function toEthSignedMessageHash(
+        bytes32 hash
+    ) internal pure returns (bytes32) {
+        return
+            keccak256(
+                abi.encodePacked("\x19Ethereum Signed Message:\n32", hash)
+            );
     }
 
     // Helper function to replicate the exact hash required by withdrawWithSignature
@@ -174,12 +191,15 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
         bytes32 messageHash = keccak256(
             abi.encodePacked(msg.sender, amount, nonce, expiry, address(this))
         );
+        emit DebugMessageHash(messageHash);
 
         bytes32 ethSignedHash = toEthSignedMessageHash(messageHash);
+        emit DebugEthSignedHash(ethSignedHash);
 
         // Recover the signer using ECDSA.recover
         address signer = ECDSA.recover(ethSignedHash, signature);
         emit DebugRecoveredSigner(signer); // Log recovered signer
+
         require(signer == trustedSigner, "Invalid signature");
 
         require(tmkocToken.transfer(msg.sender, amount), "Transfer failed");
@@ -197,7 +217,7 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
 
     /**
      * @dev Multi-sig version of emergencyWithdraw. Instead of letting a single
-     *      owner call it, we require multiple owners to sign off-chain, then 
+     *      owner call it, we require multiple owners to sign off-chain, then
      *      submit their signatures on-chain.
      */
     function emergencyWithdrawMultiSig(
@@ -207,8 +227,14 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
     ) external nonReentrant {
         require(to != address(0), "Invalid 'to' address");
         require(amount > 0, "Amount must be > 0");
-        require(tmkocToken.balanceOf(address(this)) >= amount, "Insufficient balance");
-        require(minApprovals > 0 && minApprovals <= multiSigOwners.length, "Multi-sig not set");
+        require(
+            tmkocToken.balanceOf(address(this)) >= amount,
+            "Insufficient balance"
+        );
+        require(
+            minApprovals > 0 && minApprovals <= multiSigOwners.length,
+            "Multi-sig not set"
+        );
 
         // Create the message hash that owners must have signed:
         // We might include the contract address to avoid cross-contract replay
@@ -240,7 +266,10 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
             }
         }
 
-        require(validSignatures >= minApprovals, "Not enough valid owner signatures");
+        require(
+            validSignatures >= minApprovals,
+            "Not enough valid owner signatures"
+        );
 
         // Now execute the emergency withdrawal
         bool success = tmkocToken.transfer(to, amount);
@@ -251,24 +280,23 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
 
     // Helper function for testing of emergencyWithdrwal
     function getEmergencyWithdrawHash(
-    address to,
-    uint256 amount
+        address to,
+        uint256 amount
     ) external view returns (bytes32) {
-    // Create the same messageHash as in emergencyWithdrawMultiSig
-    bytes32 messageHash = keccak256(
-        abi.encodePacked("EMERGENCY_WITHDRAW", to, amount, address(this))
-    );
+        // Create the same messageHash as in emergencyWithdrawMultiSig
+        bytes32 messageHash = keccak256(
+            abi.encodePacked("EMERGENCY_WITHDRAW", to, amount, address(this))
+        );
 
-    // Convert it to the Ethereum Signed Message Hash
-    return toEthSignedMessageHash(messageHash);
-}
+        // Convert it to the Ethereum Signed Message Hash
+        return toEthSignedMessageHash(messageHash);
+    }
 
-function getBalance(address user) external view returns (uint256) {
+    function getBalance(address user) external view returns (uint256) {
         return tmkocToken.balanceOf(user);
     }
 
     function contractBalance() external view returns (uint256) {
         return tmkocToken.balanceOf(address(this));
     }
-
 }

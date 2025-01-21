@@ -165,6 +165,14 @@ describe("ClubhouseVault", function () {
         const ethSignedHash = ethers.hashMessage(arrayify(messageHash)); // Adds Ethereum Signed Message prefix
         const signature1 = await trustedSigner.signMessage(arrayify(ethSignedHash));
 
+        // const messageHash = ethers.utils.solidityKeccak256(
+        //     ["address", "uint256", "uint256", "uint256", "address"],
+        //     [user.address, amount, nonce, expiry, vault.address]
+        // );
+        // const ethSignedHash = ethers.utils.hashMessage(ethers.utils.arrayify(messageHash));
+        // const signature = await trustedSigner.signMessage(ethers.utils.arrayify(ethSignedHash));
+        
+
         // Debugging
         console.log("Ethereum Signed Hash:", ethSignedHash);
         console.log("Signature1:", signature1);
