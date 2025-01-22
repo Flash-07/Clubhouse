@@ -178,7 +178,7 @@ describe("ClubhouseVault", function () {
         console.log("Signature1:", signature1);
 
         // Step 6: Call withdrawWithSignature
-        await vault.connect(user).withdrawWithSignature(amount, nonce, expiry, signature);
+        await vault.connect(user).withdrawWithSignature(amount, nonce, message, expiry, signature);
 
         // Check user balance
         const userBalance = await tmkoc.balanceOf(user.address);

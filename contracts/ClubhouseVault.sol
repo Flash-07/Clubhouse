@@ -5,12 +5,13 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
  * @title ClubhouseVault
  * @dev A contract for managing ERC20 token deposits, withdrawals via off-chain signatures, and multi-signature emergency withdrawals.
  */
-contract ClubhouseVault is ReentrancyGuard, Ownable {
+contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
     using ECDSA for bytes32;
 
     // ERC20 token managed by the vault
@@ -23,8 +24,10 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
     uint256 public totalTournamentFees;
 
     // Nonce tracking to prevent replay attacks
-    mapping(uint256 => bool) public usedNonces;
-    // mapping(address => bool) validSigners;
+    mapping(address => mapping(uint256 => bool)) public usedNonces;
+
+    mapping(address => bool) validSigners;
+    mapping(address => bool) public isMultiSigOwner;
 
     // Multi-signature owners for emergency withdrawals
     address[] public multiSigOwners;
@@ -67,12 +70,22 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
         uint256 _minApprovals
     ) external onlyOwner {
         require(owners.length > 0, "No owners provided");
+        require(owners.length <= 10, "Too many owners");
         require(
             _minApprovals > 0 && _minApprovals <= owners.length,
             "Invalid minApprovals"
         );
 
-        // In practice, you'd likely clean up old owners or handle carefully
+        // Clear previous multi-signature owners
+        for (uint256 i = 0; i < multiSigOwners.length; i++) {
+            isMultiSigOwner[multiSigOwners[i]] = false;
+        }
+
+        // Update the owners and mapping
+        for (uint256 i = 0; i < owners.length; i++) {
+            isMultiSigOwner[owners[i]] = true;
+        }
+
         multiSigOwners = owners;
         minApprovals = _minApprovals;
 
@@ -177,16 +190,18 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
         string memory message,
         uint256 expiry,
         bytes calldata signature
-    ) external nonReentrant {
+    ) external nonReentrant whenNotPaused {
         require(block.timestamp <= expiry, "Signature expired");
-        require(!usedNonces[nonce], "Nonce already used");
+        // require(!usedNonces[nonce], "Nonce already used");
+        require(!usedNonces[caller][nonce], "Nonce already used");
         require(
             tmkocToken.balanceOf(address(this)) >= amount,
             "Insufficient contract balance"
         );
         require(trustedSigner != address(0), "Trusted signer not set");
 
-        usedNonces[nonce] = true;
+        // usedNonces[nonce] = true;
+        usedNonces[caller][nonce] = true;
 
         bytes32 messageHash = getMessageHash(caller, amount, message, nonce);
 
@@ -218,17 +233,17 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
         uint256 amount,
         uint256 expiry,
         bytes[] calldata signatures
-    ) external nonReentrant {
+    ) external nonReentrant whenNotPaused {
         require(to != address(0), "Invalid 'to' address");
         require(amount > 0, "Amount must be > 0");
         require(
             tmkocToken.balanceOf(address(this)) >= amount,
             "Insufficient balance"
         );
-        require(
-            minApprovals > 0 && minApprovals <= multiSigOwners.length,
-            "Multi-sig not set"
-        );
+        // require(
+        //     minApprovals > 0 && minApprovals <= multiSigOwners.length,
+        //     "Multi-sig not set"
+        // );
         require(block.timestamp <= expiry, "Signature expired");
 
         // Create the message hash that owners must have signed:
@@ -239,34 +254,45 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
         bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
 
         // Track which owners have signed (avoid double-counting the same owner)
-        uint256 validSignatures;
-        address[] memory seenOwners = new address[](multiSigOwners.length);
+        uint256 validSignatures = 0;
+        // address[] memory seenOwners = new address[](multiSigOwners.length);
+
+        // for (uint256 i = 0; i < signatures.length; i++) {
+        //     address signer = ECDSA.recover(ethSignedHash, signatures[i]);
+        //     // Must be one of the multiSigOwners
+        //     if (_isMultiSigOwner(signer)) {
+        //         // Check we haven't already counted this owner
+        //         bool alreadyCounted = false;
+        //         for (uint256 j = 0; j < validSignatures; j++) {
+        //             if (seenOwners[j] == signer) {
+        //                 alreadyCounted = true;
+        //                 break;
+        //             }
+        //         }
+        //         if (!alreadyCounted) {
+        //             seenOwners[validSignatures] = signer;
+        //             validSignatures++;
+        //         }
+        //     }
+        // }
+        bool[] memory seenSigners = new bool[](multiSigOwners.length);
+
+        // Limit the number of signatures to the number of multi-sig owners
+        require(
+            signatures.length <= multiSigOwners.length,
+            "Too many signatures"
+        );
 
         for (uint256 i = 0; i < signatures.length; i++) {
             address signer = ECDSA.recover(ethSignedHash, signatures[i]);
-            // Must be one of the multiSigOwners
-            if (_isMultiSigOwner(signer)) {
-                // Check we haven't already counted this owner
-                bool alreadyCounted = false;
-                for (uint256 j = 0; j < validSignatures; j++) {
-                    if (seenOwners[j] == signer) {
-                        alreadyCounted = true;
-                        break;
-                    }
-                }
-                if (!alreadyCounted) {
-                    seenOwners[validSignatures] = signer;
+            for (uint256 j = 0; j < multiSigOwners.length; j++) {
+                if (multiSigOwners[j] == signer && !seenSigners[j]) {
+                    seenSigners[j] = true;
                     validSignatures++;
+                    break; // Exit inner loop early for efficiency
                 }
             }
         }
-        // for (uint256 i = 0; i < signatures.length; i++) {
-        //     address signer = ECDSA.recover(ethSignedHash, signatures[i]);
-        //     require(_isMultiSigOwner(signer), "Invalid signer");
-        //     require(!validSigners[signer], "Duplicate signer");
-        //     validSigners[signer] = true;
-        //     validSignatures++;
-        // }
 
         require(
             validSignatures >= minApprovals,
