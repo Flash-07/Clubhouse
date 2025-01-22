@@ -6,22 +6,33 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
+/**
+ * @title ClubhouseVault
+ * @dev A contract for managing ERC20 token deposits, withdrawals via off-chain signatures, and multi-signature emergency withdrawals.
+ */
 contract ClubhouseVault is ReentrancyGuard, Ownable {
     using ECDSA for bytes32;
+
+    // ERC20 token managed by the vault
     IERC20 public tmkocToken;
 
-    // Address that signs off-chain user withdrawals
+    // Address authorized to sign off-chain user withdrawal requests
     address public trustedSigner;
 
-    // Additional multi-sig owners for emergency withdraw
-    address[] public multiSigOwners;
-    uint256 public minApprovals; // e.g., 2 out of 3
+    // Total tournament fees collected
+    uint256 public totalTournamentFees;
 
-    uint256 public totalTournamentFees; // Tracks total tournament fees collected
-    mapping(address => uint256) public depositedTokens;
+    // Nonce tracking to prevent replay attacks
     mapping(uint256 => bool) public usedNonces;
-    mapping(address => bool) validSigners;
+    // mapping(address => bool) validSigners;
 
+    // Multi-signature owners for emergency withdrawals
+    address[] public multiSigOwners;
+
+    // Minimum number of approvals required for multi-signature actions
+    uint256 public minApprovals;
+
+    // Events for logging key actions and changes
     event TokensDeposited(address indexed user, uint256 amount);
     event WinningWithdrawn(address indexed user, uint256 amount);
     event WithdrawalWithSignature(
@@ -31,14 +42,6 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
     );
     event TournamentFeesCollected(uint256 amount);
     event TournamentFeesWithdrawn(address indexed admin, uint256 amount);
-    event DebugRecoveredSigner(address recoveredSigner);
-    event DebugMessageHash(bytes32 messageHash);
-    event DebugEthSignedHash(bytes32 ethSignedHash);
-
-    // event EmergencyWithdrawal(address indexed to, uint256 amount);
-    // event TrustedSignerUpdated(address indexed oldSigner, address indexed newSigner);
-
-    // Multi-sig events
     event EmergencyWithdrawal(address indexed to, uint256 amount);
     event TrustedSignerUpdated(
         address indexed oldSigner,
@@ -46,13 +49,18 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
     );
     event MultiSigOwnersUpdated(address[] newOwners, uint256 minApprovals);
 
+    /**
+     * @dev Initializes the contract with the specified ERC20 token address.
+     * @param _tokenAddress Address of the ERC20 token contract.
+     */
     constructor(address _tokenAddress) Ownable(msg.sender) {
         tmkocToken = IERC20(_tokenAddress);
     }
 
     /**
-     * @dev Sets the addresses for multi-sig owners and the minimum approvals needed.
-     *      Callable only by the primary owner (from Ownable).
+     * @dev Updates the list of multi-signature owners and the minimum approval count.
+     * @param owners List of new multi-signature owners.
+     * @param _minApprovals Minimum number of approvals required for multi-signature actions.
      */
     function setMultiSigOwners(
         address[] calldata owners,
@@ -72,7 +80,9 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
     }
 
     /**
-     * @dev Utility to check if an address is in multiSigOwners
+     * @dev Internal helper function to check if an address is a valid multi-signature owner.
+     * @param account Address to check.
+     * @return True if the address is a multi-signature owner, otherwise false.
      */
     function _isMultiSigOwner(address account) internal view returns (bool) {
         for (uint256 i = 0; i < multiSigOwners.length; i++) {
@@ -83,98 +93,88 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
         return false;
     }
 
-    // Setting the Trusted Signer
+    /**
+     * @dev Updates the trusted signer for off-chain signature verification.
+     * @param _trustedSigner Address of the new trusted signer.
+     */
     function setTrustedSigner(address _trustedSigner) external onlyOwner {
         require(_trustedSigner != address(0), "Invalid signer address");
         emit TrustedSignerUpdated(trustedSigner, _trustedSigner);
         trustedSigner = _trustedSigner;
     }
 
-    // Deposit Tokens
+    /**
+     * @dev Allows users to deposit ERC20 tokens into the vault.
+     * @param caller Address of the user making the deposit.
+     * @param amount Amount of tokens to deposit.
+     */
     function deposit(address caller, uint256 amount) external nonReentrant {
         require(amount > 0, "Amount must be greater than 0");
         require(caller != address(0), "Invalid recipient address");
         bool success = tmkocToken.transferFrom(caller, address(this), amount);
         require(success, "Transfer failed");
-        depositedTokens[caller] += amount;
+        // depositedTokens[caller] += amount;
         emit TokensDeposited(caller, amount);
     }
 
-    // Collect Tournament Fee
+    /**
+     * @dev Collects tournament fees from the vault's token balance.
+     * @param amount Amount of tokens to collect as fees.
+     */
     function collectTournamentFee(uint256 amount) external onlyOwner {
         require(amount > 0, "Amount must be greater than 0");
         totalTournamentFees += amount;
         emit TournamentFeesCollected(amount);
     }
 
-    // Withdraw Tournament Tokens
-    function withdrawTournamentFees(
-        address to,
-        uint256 amount
-    ) external onlyOwner nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
-        require(amount <= totalTournamentFees, "Insufficient tournament fees");
-        totalTournamentFees -= amount;
-        // depositedTokens[to] -= amount;
-        tmkocToken.transfer(to, amount);
-        emit TournamentFeesWithdrawn(to, amount);
+    /**
+     * @dev Generates a hash of the withdrawal message.
+     * @param _caller Address of the user initiating the withdrawal.
+     * @param _amount Amount of tokens to withdraw.
+     * @param _message Additional withdrawal details.
+     * @param _nonce Unique nonce to prevent replay attacks.
+     * @return The hashed withdrawal message.
+     */
+    function getMessageHash(
+        address _caller,
+        uint256 _amount,
+        string memory _message,
+        uint256 _nonce
+    ) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(_caller, _amount, _message, _nonce));
     }
 
-    // Helper function to convert a hash to Ethereum signed message hash
-    function toEthSignedMessageHash(
-        bytes32 hash
-    ) internal pure returns (bytes32) {
+    /**
+     * @dev Converts a hash into an Ethereum Signed Message hash.
+     * @param _messageHash The original hash.
+     * @return The Ethereum Signed Message hash.
+     */
+    function getEthSignedMessageHash(
+        bytes32 _messageHash
+    ) public pure returns (bytes32) {
         return
             keccak256(
-                abi.encodePacked("\x19Ethereum Signed Message:\n32", hash)
+                abi.encodePacked(
+                    "\x19Ethereum Signed Message:\n32",
+                    _messageHash
+                )
             );
     }
 
-    // Helper function to replicate the exact hash required by withdrawWithSignature
-    //-------------------------------------------------------------------------
-
     /**
-     * @dev Returns the Ethereum Signed Message hash that must be signed off-chain
-     *      by the `trustedSigner` to authorize a withdrawal.
-     *
-     * @param user   The address that will call `withdrawWithSignature`.
-     * @param amount The token amount to withdraw.
-     * @param nonce  A unique nonce to prevent replay attacks.
-     * @param expiry The timestamp by which this signature expires.
-     *
-     * Off-chain, the `trustedSigner` should sign this returned hash. Then the user
-     * passes that signature to `withdrawWithSignature(...)`.
+     * @dev Allows users to withdraw tokens using an off-chain signature.
+     * @param caller Address of the user withdrawing tokens.
+     * @param amount Amount of tokens to withdraw.
+     * @param nonce Unique nonce for the withdrawal.
+     * @param message Additional withdrawal details.
+     * @param expiry Expiry timestamp for the signature.
+     * @param signature Off-chain signature validating the withdrawal.
      */
-    function getWithdrawWithSignatureHash(
-        address user,
-        uint256 amount,
-        uint256 nonce,
-        uint256 expiry
-    ) external view returns (bytes32) {
-        // Step 1: Same raw message as `withdrawWithSignature` uses
-        bytes32 messageHash = keccak256(
-            abi.encodePacked(user, amount, nonce, expiry, address(this))
-        );
-
-        // Step 2: Convert to an Ethereum Signed Message
-        return toEthSignedMessageHash(messageHash);
-    }
-
-    // Withdraw Winnings
-    function withdrawWithdrawableWinning(uint256 amount) external nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
-        require(
-            tmkocToken.balanceOf(address(this)) >= amount,
-            "Insufficient contract balance"
-        );
-        require(tmkocToken.transfer(msg.sender, amount), "Transfer failed");
-        emit WinningWithdrawn(msg.sender, amount);
-    }
-
-    // Withdraw Winning by Signature
     function withdrawWithSignature(
+        address caller,
         uint256 amount,
         uint256 nonce,
+        string memory message,
         uint256 expiry,
         bytes calldata signature
     ) external nonReentrant {
@@ -188,41 +188,35 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
 
         usedNonces[nonce] = true;
 
-        bytes32 messageHash = keccak256(
-            abi.encodePacked(msg.sender, amount, nonce, expiry, address(this))
-        );
-        emit DebugMessageHash(messageHash);
+        bytes32 messageHash = getMessageHash(caller, amount, message, nonce);
 
-        bytes32 ethSignedHash = toEthSignedMessageHash(messageHash);
-        emit DebugEthSignedHash(ethSignedHash);
+        bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
 
         // Recover the signer using ECDSA.recover
-        address signer = ECDSA.recover(ethSignedHash, signature);
-        emit DebugRecoveredSigner(signer); // Log recovered signer
+        // address _signer = ECDSA.recover(ethSignedHash, signature);
+        // ECDSA.recover(ethSignedHash, signature) == trustedSigner;
+        require(
+            ECDSA.recover(ethSignedHash, signature) == trustedSigner,
+            "Invalid signature"
+        );
 
-        require(signer == trustedSigner, "Invalid signature");
+        // require(_signer == trustedSigner, "Invalid signature");
 
-        require(tmkocToken.transfer(msg.sender, amount), "Transfer failed");
-
-        emit WithdrawalWithSignature(msg.sender, amount, nonce);
+        require(tmkocToken.transfer(caller, amount), "Transfer failed");
+        emit WithdrawalWithSignature(caller, amount, nonce);
     }
 
-    // Emergency Withdrawal
-    // function emergencyWithdraw(address to, uint256 amount) external onlyOwner nonReentrant{
-    //     require(amount > 0, "Amount must be greater than 0");
-    //     require(tmkocToken.balanceOf(address(this)) >= amount, "Insufficient balance");
-    //     tmkocToken.transfer(to, amount);
-    //     emit EmergencyWithdrawal(to, amount);
-    // }
-
     /**
-     * @dev Multi-sig version of emergencyWithdraw. Instead of letting a single
-     *      owner call it, we require multiple owners to sign off-chain, then
-     *      submit their signatures on-chain.
+     * @dev Executes an emergency withdrawal using multi-signature approval.
+     * @param to Address to receive the withdrawn tokens.
+     * @param amount Amount of tokens to withdraw.
+     * @param expiry Expiry timestamp for the signatures.
+     * @param signatures Array of signatures from the multi-signature owners.
      */
     function emergencyWithdrawMultiSig(
         address to,
         uint256 amount,
+        uint256 expiry,
         bytes[] calldata signatures
     ) external nonReentrant {
         require(to != address(0), "Invalid 'to' address");
@@ -235,13 +229,14 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
             minApprovals > 0 && minApprovals <= multiSigOwners.length,
             "Multi-sig not set"
         );
+        require(block.timestamp <= expiry, "Signature expired");
 
         // Create the message hash that owners must have signed:
         // We might include the contract address to avoid cross-contract replay
         bytes32 messageHash = keccak256(
             abi.encodePacked("EMERGENCY_WITHDRAW", to, amount, address(this))
         );
-        bytes32 ethSignedHash = toEthSignedMessageHash(messageHash);
+        bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
 
         // Track which owners have signed (avoid double-counting the same owner)
         uint256 validSignatures;
@@ -265,6 +260,13 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
                 }
             }
         }
+        // for (uint256 i = 0; i < signatures.length; i++) {
+        //     address signer = ECDSA.recover(ethSignedHash, signatures[i]);
+        //     require(_isMultiSigOwner(signer), "Invalid signer");
+        //     require(!validSigners[signer], "Duplicate signer");
+        //     validSigners[signer] = true;
+        //     validSignatures++;
+        // }
 
         require(
             validSignatures >= minApprovals,
@@ -276,27 +278,5 @@ contract ClubhouseVault is ReentrancyGuard, Ownable {
         require(success, "Transfer failed");
 
         emit EmergencyWithdrawal(to, amount);
-    }
-
-    // Helper function for testing of emergencyWithdrwal
-    function getEmergencyWithdrawHash(
-        address to,
-        uint256 amount
-    ) external view returns (bytes32) {
-        // Create the same messageHash as in emergencyWithdrawMultiSig
-        bytes32 messageHash = keccak256(
-            abi.encodePacked("EMERGENCY_WITHDRAW", to, amount, address(this))
-        );
-
-        // Convert it to the Ethereum Signed Message Hash
-        return toEthSignedMessageHash(messageHash);
-    }
-
-    function getBalance(address user) external view returns (uint256) {
-        return tmkocToken.balanceOf(user);
-    }
-
-    function contractBalance() external view returns (uint256) {
-        return tmkocToken.balanceOf(address(this));
     }
 }
