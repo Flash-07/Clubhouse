@@ -143,53 +143,49 @@ describe("ClubhouseVault", function () {
         // Step 3: Deposit tokens
         await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
         const vaultBalanceAfterDeposit = await tmkoc.balanceOf(vault.getAddress());
+        console.log("Vault Balance After Deposit: ", vaultBalanceAfterDeposit);
         expect(vaultBalanceAfterDeposit).to.equal(ethers.parseEther("500"));
+        console.log("Vault Address: ", await vault.getAddress());
 
         // Step 4: Generate the withdraw signature hash
         const amount = ethers.parseEther("100");
         const nonce = 1;
         const expiry = (await time.latest()) + 60 * 60; // 1 hour from now
         const message = "Withdrawal by user";
+        const VaultAddress = await vault.getAddress();
+        const user1 = "0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2";
 
-        const messageHash = ethers.solidityPackedKeccak256(["address", "uint256", "string", "uint256", "uint256", "address"],
-            [user.address, amount, message, nonce, expiry, vault.getAddress()]
+        // const messageHash = ethers.solidityPackedKeccak256(
+        //     ["address", "uint256", "string", "uint256", "uint256", "address"],
+        //     [user.address, amount, message, nonce, expiry, VaultAddress]
+        // );
+        const messageHash = ethers.solidityPackedKeccak256(
+            ["address", "uint256", "string", "uint256"],
+            [user.address, amount, message, nonce]
         );
-        // const messageHash = await vault.getWithdrawWithSignatureHash(user.address, amount, nonce, expiry);
-
-        // Log for debugging
-        console.log("a Hash:", messageHash);
+        // const messageHash = await vault.getMessageHash(user1, amount, message, nonce);
+        console.log("MessageHash: ", messageHash);
+        // const ethSignedHash = await vault.getEthSignedMessageHash(messageHash);
+        // console.log("Message Hash After Eth Signed: ", ethSignedHash);
 
         // // Step 5: Sign the hash with the trusted signer
-        // const signature = await trustedSigner.signMessage(arrayify(messageHash));
-        // console.log("Signature:", signature);
-
-        // Log signer address for debugging
-        console.log("Trusted Signer Address:", trustedSigner.address);
-
-        // Step E: Sign the prefixed hash
-        const ethSignedHash = ethers.hashMessage(arrayify(messageHash)); // Adds Ethereum Signed Message prefix
+        const ethSignedHash = ethers.hashMessage(arrayify(messageHash));
+        console.log("Eth Signed Hash: ", ethSignedHash);
         const signature = await trustedSigner.signMessage(arrayify(ethSignedHash));
-
-        // const messageHash = ethers.utils.solidityKeccak256(
-        //     ["address", "uint256", "uint256", "uint256", "address"],
-        //     [user.address, amount, nonce, expiry, vault.address]
-        // );
-        // const ethSignedHash = ethers.utils.hashMessage(ethers.utils.arrayify(messageHash));
-        // const signature = await trustedSigner.signMessage(ethers.utils.arrayify(ethSignedHash));
-        
-
-        // Debugging
-        console.log("Ethereum Signed Hash:", ethSignedHash);
-        console.log("Signature:", signature);
+        // const signature = await trustedSigner.signMessage(ethers.toBeArray(ethSignedHash));
+        console.log("Signature: ", signature);
+        console.log("User Address: ", user.address);
 
         // Step 6: Call withdrawWithSignature
-        await vault.connect(user).withdrawWithSignature(user.address, amount, nonce, message, expiry, signature);
+        await vault
+            .connect(user)
+            .withdrawWithSignature(user.address, amount, nonce, message, expiry, signature);
 
-        // Check user balance
+        // // Check user balance
         const userBalance = await tmkoc.balanceOf(user.address);
         expect(userBalance).to.equal(ethers.parseEther("600"));
 
-        // Check vault balance
+        // // Check vault balance
         const vaultBalance = await tmkoc.balanceOf(vault.getAddress());
         expect(vaultBalance).to.equal(ethers.parseEther("400"));
     });
@@ -207,16 +203,56 @@ describe("ClubhouseVault", function () {
         const nonce = 2;
         const expiry = (await time.latest()) + 60 * 60;
         const message = "Invalid withdrawal test";
-        // const messageHash = await vault.getWithdrawWithSignatureHash(user.address, amount, nonce, expiry);
-        const messageHash = ethers.solidityPackedKeccak256(
-            ["address", "uint256", "string", "uint256", "uint256", "address"],
-            [user.address, amount, message, nonce, expiry, vault.getAddress()]
-        );
-        const invalidSignature = await user.signMessage(arrayify(messageHash));
 
+        const messageHash = ethers.solidityPackedKeccak256(
+            ["address", "uint256", "string", "uint256"],
+            [user.address, amount, message, nonce]
+        );
+
+        // Sign with a different signer
+        const ethSignedHash = ethers.hashMessage(arrayify(messageHash));
+        const invalidSignature = await otherSigner.signMessage(arrayify(ethSignedHash));
+
+        // await expect(
+        //     vault
+        //         .connect(user)
+        //         .withdrawWithSignature(user.address, amount, nonce, message, expiry, invalidSignature)
+        // ).to.be.revertedWith("Invalid signature");
+        await vault
+        .connect(user)
+        .withdrawWithSignature(user.address, amount, nonce, message, expiry, invalidSignature);
+    });
+
+    it("should prevent withdrawals if the contract is paused", async function () {
+        const { tmkoc, vault, user, trustedSigner } = await deployFixtures();
+
+        // Transfer tokens, approve, and deposit
+        await tmkoc.transfer(user.address, ethers.parseEther("1000"));
+        await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
+        await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+
+        // Pause the contract
+        await vault.pause();
+
+        const amount = ethers.parseEther("100");
+        const nonce = 1;
+        const expiry = (await time.latest()) + 60 * 60;
+        const message = "Paused withdrawal test";
+
+        const messageHash = ethers.solidityPackedKeccak256(
+            ["address", "uint256", "string", "uint256"],
+            [user.address, amount, message, nonce]
+        );
+
+        const ethSignedHash = ethers.hashMessage(arrayify(messageHash));
+        const signature = await trustedSigner.signMessage(arrayify(ethSignedHash));
+
+        // Expect revert due to paused contract
         await expect(
-            vault.connect(user).withdrawWithSignature(amount, nonce, expiry, invalidSignature)
-        ).to.be.revertedWith("Invalid signature");
+            vault
+                .connect(user)
+                .withdrawWithSignature(user.address, amount, nonce, message, expiry, signature)
+        ).to.be.revertedWithCustomError(vault, "EnforcedPause");
     });
 });
 

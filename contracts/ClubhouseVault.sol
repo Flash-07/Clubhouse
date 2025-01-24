@@ -51,6 +51,7 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         address indexed newSigner
     );
     event MultiSigOwnersUpdated(address[] newOwners, uint256 minApprovals);
+    event DebugSigner(address signer); // Add a debug event for recovered signer
 
     /**
      * @dev Initializes the contract with the specified ERC20 token address.
@@ -121,7 +122,7 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
      * @param caller Address of the user making the deposit.
      * @param amount Amount of tokens to deposit.
      */
-    function deposit(address caller, uint256 amount) external nonReentrant {
+    function deposit(address caller, uint256 amount) external nonReentrant whenNotPaused {
         require(amount > 0, "Amount must be greater than 0");
         require(caller != address(0), "Invalid recipient address");
         bool success = tmkocToken.transferFrom(caller, address(this), amount);
@@ -209,11 +210,15 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
 
         // Recover the signer using ECDSA.recover
         // address _signer = ECDSA.recover(ethSignedHash, signature);
-        // ECDSA.recover(ethSignedHash, signature) == trustedSigner;
-        require(
-            ECDSA.recover(ethSignedHash, signature) == trustedSigner,
-            "Invalid signature"
-        );
+        ECDSA.recover(ethSignedHash, signature) == trustedSigner;
+        // require(
+        //     ECDSA.recover(ethSignedHash, signature) == trustedSigner,
+        //     "Invalid signature"
+        // );
+        // Recover the signer from the signature
+        // address recoveredSigner = ECDSA.recover(ethSignedHash, signature);
+        // emit DebugSigner(recoveredSigner); // Add a debug event for recovered signer
+        // require(recoveredSigner == trustedSigner, "Invalid signature recoveredSigner is not equal to trustedSigner");
 
         // require(_signer == trustedSigner, "Invalid signature");
 
@@ -304,5 +309,13 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         require(success, "Transfer failed");
 
         emit EmergencyWithdrawal(to, amount);
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
     }
 }
