@@ -129,4 +129,4 @@ The main smart contract that manages the core functionality of the system.
 
 - **setTrustedSigner**(address _trustedSigner): Updates the trusted signer for off-chain signature validation.
 
-- **setMultiSigOwners(address[] owners, uint256 _minApprovals): Configures the multi-signature owners and minimum required approvals.
+- **setMultiSigOwners**(address[] owners, uint256 _minApprovals): Configures the multi-signature owners and minimum required approvals.
