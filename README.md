@@ -41,6 +41,7 @@ npm install
 
 ### Project Structure
 
+```
 ├── contracts
 │   ├── ClubhouseVault.sol         # Main Vault contract
 │   ├── TaarakMehtaKaOoltahChashmash.sol  # Example ERC20 Token contract
@@ -51,6 +52,7 @@ npm install
 ├── .env                           # Environment variables
 ├── hardhat.config.ts              # Hardhat configuration file
 └── README.md                      # Project documentation
+```
 
 ---
 
@@ -73,12 +75,12 @@ npx hardhat compile
 
 To deploy the contracts to a local or test network, update the hardhat.config.ts with your desired network configuration. Then, run:
 ```bash
-npx hardhat run scripts/deploy.ts --network <network_name>
+npx hardhat ignition deploy ./ignition/modules/<deploy_script.ts> --network <network_name>
 ```
 
 Example for deploying to a local Hardhat network:
 ```bash
-npx hardhat run scripts/deploy.ts --network localhost
+npx hardhat ignition deploy ./ignition/modules/<deploy_script.ts> --network localhost
 ```
 
 #### Run Tests
