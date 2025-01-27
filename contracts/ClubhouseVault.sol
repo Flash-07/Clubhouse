@@ -7,11 +7,11 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title ClubhouseVault
- * @dev A contract for managing ERC20 token deposits, withdrawals via off-chain signatures, and multi-signature emergency withdrawals.
+ * @dev Manages ERC20 token deposits, withdrawals with off-chain signatures,
+ * and multi-signature emergency withdrawals. Designed for secure and scalable
+ * tournament fee collection and payouts.
  */
 contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
     using ECDSA for bytes32;
@@ -19,16 +19,16 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
     // ERC20 token managed by the vault
     IERC20 public tmkocToken;
 
-    // Address authorized to sign off-chain user withdrawal requests
+    // Authorized signer for user withdrawals
     address public trustedSigner;
 
     // Total tournament fees collected
     uint256 public totalTournamentFees;
 
-    // Nonce tracking to prevent replay attacks
+    // Tracks used nonces to prevent replay attacks
     mapping(address => mapping(uint256 => bool)) public usedNonces;
 
-    mapping(address => bool) validSigners;
+    // Mapping of valid multi-signature signers
     mapping(address => bool) public isMultiSigOwner;
 
     // Multi-signature owners for emergency withdrawals
@@ -39,27 +39,26 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
 
     // Events for logging key actions and changes
     event TokensDeposited(address indexed user, uint256 amount);
-    event WinningWithdrawn(address indexed user, uint256 amount);
     event WithdrawalWithSignature(
         address indexed user,
         uint256 amount,
         uint256 nonce
     );
     event TournamentFeesCollected(uint256 amount);
-    event TournamentFeesWithdrawn(address indexed admin, uint256 amount);
+    event TournamentFeesWithdrawn(address indexed to, uint256 amount);
     event EmergencyWithdrawal(address indexed to, uint256 amount);
     event TrustedSignerUpdated(
         address indexed oldSigner,
         address indexed newSigner
     );
     event MultiSigOwnersUpdated(address[] newOwners, uint256 minApprovals);
-    event DebugSigner(address signer); // Add a debug event for recovered signer
 
     /**
      * @dev Initializes the contract with the specified ERC20 token address.
      * @param _tokenAddress Address of the ERC20 token contract.
      */
     constructor(address _tokenAddress) Ownable(msg.sender) {
+        require(_tokenAddress != address(0), "Invalid token address");
         tmkocToken = IERC20(_tokenAddress);
     }
 
@@ -96,20 +95,6 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
     }
 
     /**
-     * @dev Internal helper function to check if an address is a valid multi-signature owner.
-     * @param account Address to check.
-     * @return True if the address is a multi-signature owner, otherwise false.
-     */
-    function _isMultiSigOwner(address account) internal view returns (bool) {
-        for (uint256 i = 0; i < multiSigOwners.length; i++) {
-            if (multiSigOwners[i] == account) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
      * @dev Updates the trusted signer for off-chain signature verification.
      * @param _trustedSigner Address of the new trusted signer.
      */
@@ -124,12 +109,16 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
      * @param caller Address of the user making the deposit.
      * @param amount Amount of tokens to deposit.
      */
-    function deposit(address caller, uint256 amount) external nonReentrant whenNotPaused {
+    function deposit(
+        address caller,
+        uint256 amount
+    ) external nonReentrant whenNotPaused {
         require(amount > 0, "Amount must be greater than 0");
         require(caller != address(0), "Invalid recipient address");
+
         bool success = tmkocToken.transferFrom(caller, address(this), amount);
         require(success, "Transfer failed");
-        // depositedTokens[caller] += amount;
+
         emit TokensDeposited(caller, amount);
     }
 
@@ -204,20 +193,18 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
 
         usedNonces[caller][nonce] = true;
 
+        // Generate and verify the signature hash
         bytes32 messageHash = getMessageHash(caller, amount, message, nonce);
-
         bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
-
-        // Recover the signer using ECDSA.recover
-        // ECDSA.recover(ethSignedHash, signature) == trustedSigner;
         address recoverSinger = ECDSA.recover(ethSignedHash, signature);
-        require(recoverSinger == trustedSigner,"Invalid signature");
+        require(recoverSinger == trustedSigner, "Invalid signature");
 
+        // Execute the token transfer
         require(tmkocToken.transfer(caller, amount), "Transfer failed");
         emit WithdrawalWithSignature(caller, amount, nonce);
     }
 
-      /**
+    /**
      * @dev Generates a hash of the withdrawal message.
      * @param _to Address of the user where amount is withdrawing.
      * @param _amount Amount of tokens to withdraw.
@@ -231,64 +218,12 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         return keccak256(abi.encodePacked(_to, _amount, _thisContract));
     }
 
-   
-    // function emergencyWithdrawMultiSig(
-    //     address to,
-    //     uint256 amount,
-    //     uint256 expiry,
-    //     bytes[] calldata signatures
-    // ) external nonReentrant whenNotPaused {
-    //     require(to != address(0), "Invalid 'to' address");
-    //     require(amount > 0, "Amount must be > 0");
-    //     require(
-    //         tmkocToken.balanceOf(address(this)) >= amount,
-    //         "Insufficient balance"
-    //     );
- 
-    //     require(block.timestamp <= expiry, "Signature expired");
-
-    //     // Create the message hash that owners must have signed:
-    //     // Contract address to avoid cross-contract replay
-    //     bytes32 messageHash = keccak256(
-    //         abi.encodePacked("EMERGENCY_WITHDRAW", to, amount, address(this))
-    //     );
-    //     bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
-
-    //     // Track which owners have signed (avoid double-counting the same owner)
-    //     uint256 validSignatures = 0;
-       
-    //     bool[] memory seenSigners = new bool[](multiSigOwners.length);
-
-    //     // Limit the number of signatures to the number of multi-sig owners
-    //     require(
-    //         signatures.length <= multiSigOwners.length,
-    //         "Too many signatures"
-    //     );
-
-    //     for (uint256 i = 0; i < signatures.length; i++) {
-    //         address signer = ECDSA.recover(ethSignedHash, signatures[i]);
-    //         for (uint256 j = 0; j < multiSigOwners.length; j++) {
-    //             if (multiSigOwners[j] == signer && !seenSigners[j]) {
-    //                 seenSigners[j] = true;
-    //                 validSignatures++;
-    //                 break; // Exit inner loop early for efficiency
-    //             }
-    //         }
-    //     }
-
-    //     require(
-    //         validSignatures >= minApprovals,
-    //         "Not enough valid owner signatures"
-    //     );
-
-    //     // Now execute the emergency withdrawal
-    //     bool success = tmkocToken.transfer(to, amount);
-    //     require(success, "Transfer failed");
-
-    //     emit EmergencyWithdrawal(to, amount);
-    // }
-
-     // Emergency Withdraw with Multi-Signature Approval
+    /**
+     * @dev Allows the owner to perform an emergency withdrawal with multi-signature approval.
+     * @param to Address receiving the withdrawn tokens.
+     * @param amount Amount to withdraw.
+     * @param signatures Array of signatures from approved multi-signature owners.
+     */
     function emergencyWithdraw(
         address to,
         uint256 amount,
@@ -305,25 +240,21 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
             "Not enough valid owner signatures"
         );
 
-        // bytes32 messageHash = keccak256(
-        //     abi.encodePacked(to, amount, address(this))
-        // );
-        // bytes32 ethSignedHash = ECDSA.toEthSignedMessageHash(messageHash);
-
-        bytes32 messageHash = getMessageHashForOwnerWithdrawal(to, amount, address(this));
+        // Verify the multi-signature approvals
+        bytes32 messageHash = getMessageHashForOwnerWithdrawal(
+            to,
+            amount,
+            address(this)
+        );
         bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
 
-        // Validate signatures
         uint256 validSignatures = 0;
         bool[] memory hasSigned = new bool[](multiSigOwners.length);
 
         for (uint256 i = 0; i < signatures.length; i++) {
             address signer = ECDSA.recover(ethSignedHash, signatures[i]);
             for (uint256 j = 0; j < multiSigOwners.length; j++) {
-                if (
-                    multiSigOwners[j] == signer &&
-                    !hasSigned[j]
-                ) {
+                if (multiSigOwners[j] == signer && !hasSigned[j]) {
                     hasSigned[j] = true;
                     validSignatures++;
                     break;
@@ -340,7 +271,12 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         emit EmergencyWithdrawal(to, amount);
     }
 
-    // Withdraw Tournament Fee with Multi-Signature Approval
+    /**
+     * @dev Allows the owner to withdraw tournament fees with multi-signature approval.
+     * @param to Address receiving the withdrawn tokens.
+     * @param amount Amount of tournament fees to withdraw.
+     * @param signatures Array of signatures from approved multi-signature owners.
+     */
     function withdrawTournamentFee(
         address to,
         uint256 amount,
@@ -348,55 +284,34 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
     ) external onlyOwner nonReentrant whenNotPaused {
         require(to != address(0), "Invalid recipient address");
         require(amount > 0, "Amount must be > 0");
-        require(
-            totalTournamentFees >= amount,
-            "Insufficient tournament fees"
-        );
+        require(totalTournamentFees >= amount, "Insufficient tournament fees");
         require(
             signatures.length >= minApprovals,
             "Not enough valid owner signatures"
         );
 
-        // bytes32 messageHash = keccak256(
-        //     abi.encodePacked(to, amount, address(this))
-        // );
-        // bytes32 ethSignedHash = ECDSA.toEthSignedMessageHash(messageHash);
-        bytes32 messageHash = getMessageHashForOwnerWithdrawal(to, amount, address(this));
+        bytes32 messageHash = getMessageHashForOwnerWithdrawal(
+            to,
+            amount,
+            address(this)
+        );
         bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
-        console.log("hash ");
-        console.logBytes32(ethSignedHash);
 
         // Validate signatures
         uint256 validSignatures = 0;
         bool[] memory hasSigned = new bool[](multiSigOwners.length);
 
-
-        console.log("valid signature");
-        console.log(validSignatures);
-
         for (uint256 i = 0; i < signatures.length; i++) {
-        console.log("sig");
-        console.logBytes(signatures[i]);
-        // address signer = recoverSigner(ethSignedHash, signatures[i]);
-        address signer = ECDSA.recover(ethSignedHash, signatures[i]);
-            // address signer = ;
-            console.log("singer");
-            console.log(signer);
+            // address signer = recoverSigner(ethSignedHash, signatures[i]);
+            address signer = ECDSA.recover(ethSignedHash, signatures[i]);
             for (uint256 j = 0; j < multiSigOwners.length; j++) {
-                if (
-                     signer == multiSigOwners[j] &&
-                    !hasSigned[j]
-                ) {
-                    console.log("inside if");
+                if (signer == multiSigOwners[j] && !hasSigned[j]) {
                     hasSigned[j] = true;
                     validSignatures++;
                     break;
                 }
             }
         }
-        console.log("valid signature");
-        console.log(validSignatures);
-        console.log(minApprovals);
         require(validSignatures >= minApprovals, "Not enough valid signatures");
 
         // Deduct from tournament fees
@@ -406,7 +321,8 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         bool success = tmkocToken.transfer(to, amount);
         require(success, "Transfer failed");
 
-        // emit TournamentFeeWithdrawal(to, amount);
+        // Emit an event to log the successful withdrawal
+        emit TournamentFeesWithdrawn(to, amount);
     }
 
     function pause() external onlyOwner {
@@ -416,5 +332,4 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
     function unpause() external onlyOwner {
         _unpause();
     }
-
 }
