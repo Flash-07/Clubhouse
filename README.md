@@ -118,7 +118,7 @@ npx hardhat test
 
 The main smart contract that manages the core functionality of the system.
 
-##### Key Functions
+#### Key Functions
 - **deposit**(address caller, uint256 amount): Allows users to deposit ERC20 tokens into the vault.
 
 - **withdrawWithSignature**(address caller, uint256 amount, uint256 nonce, string message, uint256 expiry, bytes signature): Enables secure token withdrawals using off-chain signatures.
