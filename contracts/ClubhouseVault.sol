@@ -210,9 +210,9 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
 
         // Recover the signer using ECDSA.recover
-        ECDSA.recover(ethSignedHash, signature) == trustedSigner;
-        // address recoverSinger = ECDSA.recover(ethSignedHash, signature);
-        // require(recoverSinger == trustedSigner,"Invalid singature");
+        // ECDSA.recover(ethSignedHash, signature) == trustedSigner;
+        address recoverSinger = ECDSA.recover(ethSignedHash, signature);
+        require(recoverSinger == trustedSigner,"Invalid signature");
 
         require(tmkocToken.transfer(caller, amount), "Transfer failed");
         emit WithdrawalWithSignature(caller, amount, nonce);

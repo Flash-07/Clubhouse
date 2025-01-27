@@ -57,7 +57,7 @@ describe("ClubhouseVault", function () {
         const expiry = (await time.latest()) + 60 * 60; // 1 hour from now
         const message = "Withdrawal by user";
         const VaultAddress = await vault.getAddress();
-        const user1 = "0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2";
+        // const user1 = "0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2";
 
         const messageHash = ethers.solidityPackedKeccak256(
             ["address", "uint256", "string", "uint256"],
@@ -67,12 +67,21 @@ describe("ClubhouseVault", function () {
         console.log("MessageHash: ", messageHash);
 
         // // Step 5: Sign the hash with the trusted signer
-        const ethSignedHash = ethers.hashMessage(ethers.getBytes(messageHash));
-        console.log("Eth Signed Hash: ", ethSignedHash);
-        const signature = await trustedSigner.signMessage(ethers.getBytes(ethSignedHash));
+        // const ethSignedHash = ethers.hashMessage(ethers.getBytes(messageHash));
+        // console.log("Eth Signed Hash: ", ethSignedHash);
+        const signature = await trustedSigner.signMessage(ethers.getBytes(messageHash));
+        // console.log("Signature: ", signature, trustedSigner.address);
         // const signature = await trustedSigner.signMessage(ethers.toBeArray(ethSignedHash));
         console.log("Signature: ", signature);
-        console.log("User Address: ", user.address);
+        console.log("Trusted Address: ", trustedSigner.address);
+
+        // Verify the signers
+        const recoveredTrustedSigner = ethers.verifyMessage(
+            ethers.getBytes(messageHash),
+            signature
+        );
+
+        console.log("Recovered Trusted Signer : ", recoveredTrustedSigner);
 
         // Step 6: Call withdrawWithSignature
         await vault
@@ -108,12 +117,29 @@ describe("ClubhouseVault", function () {
         );
 
         // Sign with a different signer
-        const ethSignedHash = ethers.hashMessage(ethers.getBytes(messageHash));
-        const invalidSignature = await otherSigner.signMessage(ethers.getBytes(ethSignedHash));
+        // const ethSignedHash = ethers.hashMessage(ethers.getBytes(messageHash));
+        const invalidSignature = await otherSigner.signMessage(ethers.getBytes(messageHash));
 
-        await vault
-            .connect(user)
-            .withdrawWithSignature(user.address, amount, nonce, message, expiry, invalidSignature);
+        console.log("Invalid Signature: ", invalidSignature);
+        console.log("OtherSigner Address: ", otherSigner.address);
+
+        // Verify the signers
+        const recoveredOtherSigner = ethers.verifyMessage(
+            ethers.getBytes(messageHash),
+            invalidSignature
+        );
+
+        console.log("Recovered Trusted Signer : ", recoveredOtherSigner);
+
+        // await vault
+        //     .connect(user)
+        //     .withdrawWithSignature(user.address, amount, nonce, message, expiry, invalidSignature);
+        // Step 7: Expect the transaction to revert with "Invalid signature"
+        await expect(
+            vault
+                .connect(user)
+                .withdrawWithSignature(user.address, amount, nonce, message, expiry, invalidSignature)
+        ).to.be.revertedWith("Invalid signature");
     });
 
     it("should prevent withdrawals if the contract is paused", async function () {
