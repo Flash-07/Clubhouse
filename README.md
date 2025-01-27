@@ -44,7 +44,7 @@ npm install
 ```
 ├── contracts
 │   ├── ClubhouseVault.sol         # Main Vault contract
-│   ├── TaarakMehtaKaOoltahChashmash.sol  # Example ERC20 Token contract
+│   ├── TaarakMehtaKaOoltahChashmash.sol  # ERC20 Token contract
 ├── test
 │   ├── ClubhouseVault.test.ts     # Tests for the Vault contract
 ├── scripts
