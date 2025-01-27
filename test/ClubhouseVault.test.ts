@@ -2,34 +2,27 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
-/**
- * Converts a `bytes32` or similar hash into a byte array.
- * @param hex The hex string to convert.
- * @returns Uint8Array
- */
-function arrayify(hex: string): Uint8Array {
-    if (!hex.startsWith("0x") || hex.length !== 66) {
-        throw new Error("Invalid bytes32 value");
-    }
-    return Uint8Array.from(Buffer.from(hex.slice(2), "hex"));
-}
-
 describe("ClubhouseVault", function () {
+    /**
+     * Deploys and initializes the test environment for ClubhouseVault.
+     * Includes the deployment of ERC20 token and ClubhouseVault contracts.
+     */
     async function deployFixtures() {
-        // Deploy TMKOC token
+        // Deploy the TMKOC ERC20 token
         const TMKOC = await ethers.getContractFactory("TaarakMehtaKaOoltahChashmash");
         const tmkoc = await TMKOC.deploy("TaarakMehtaKaOoltah", "TMKOC", ethers.parseEther("1000000"));
 
-        // Deploy ClubhouseVault
+        // Deploy the ClubhouseVault contract
         const Vault = await ethers.getContractFactory("ClubhouseVault");
         const vault = await Vault.deploy(tmkoc.getAddress());
 
-        // Grab signers
+        // Retrieve signers for testing
         const [deployer, user, trustedSigner, otherSigner, receiver, owner1, owner2] = await ethers.getSigners();
 
-        // Set the trustedSigner in the vault
+        // Set the trusted signer for withdrawal validation
         await vault.setTrustedSigner(trustedSigner.address);
-
+        
+        // Configure multi-sig owners with a minimum of 1 approval
         await vault.setMultiSigOwners([owner1.address, owner2.address], 1);
 
         return { tmkoc, vault, deployer, user, trustedSigner, otherSigner, receiver, owner1, owner2 };
@@ -38,61 +31,56 @@ describe("ClubhouseVault", function () {
     it("should deposit tokens, generate a withdraw signature hash, and withdraw with signature", async function () {
         const { tmkoc, vault, user, trustedSigner } = await deployFixtures();
 
-        // Step 1: Transfer tokens to user
+        // Step 1: Transfer tokens to the user
         await tmkoc.transfer(user.address, ethers.parseEther("1000"));
 
-        // Step 2: Approve the vault
+        // Step 2: Approve the vault to spend tokens on behalf of the user
         await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
 
-        // Step 3: Deposit tokens
+        // Step 3: Deposit tokens into the vault
         await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+
+        // Check vault balance after deposit
         const vaultBalanceAfterDeposit = await tmkoc.balanceOf(vault.getAddress());
         console.log("Vault Balance After Deposit: ", vaultBalanceAfterDeposit);
         expect(vaultBalanceAfterDeposit).to.equal(ethers.parseEther("500"));
         console.log("Vault Address: ", await vault.getAddress());
 
-        // Step 4: Generate the withdraw signature hash
+        // Step 4: Generate the withdrawal signature hash
         const amount = ethers.parseEther("100");
         const nonce = 1;
         const expiry = (await time.latest()) + 60 * 60; // 1 hour from now
         const message = "Withdrawal by user";
         const VaultAddress = await vault.getAddress();
-        // const user1 = "0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2";
 
         const messageHash = ethers.solidityPackedKeccak256(
             ["address", "uint256", "string", "uint256"],
             [user.address, amount, message, nonce]
         );
-        // const messageHash = await vault.getMessageHash(user1, amount, message, nonce);
         console.log("MessageHash: ", messageHash);
 
-        // // Step 5: Sign the hash with the trusted signer
-        // const ethSignedHash = ethers.hashMessage(ethers.getBytes(messageHash));
-        // console.log("Eth Signed Hash: ", ethSignedHash);
+        // Step 5: Generate the signature using the trusted signer
         const signature = await trustedSigner.signMessage(ethers.getBytes(messageHash));
-        // console.log("Signature: ", signature, trustedSigner.address);
-        // const signature = await trustedSigner.signMessage(ethers.toBeArray(ethSignedHash));
         console.log("Signature: ", signature);
         console.log("Trusted Address: ", trustedSigner.address);
 
-        // Verify the signers
+        // Verify the recovered signer matches the trusted signer
         const recoveredTrustedSigner = ethers.verifyMessage(
             ethers.getBytes(messageHash),
             signature
         );
-
         console.log("Recovered Trusted Signer : ", recoveredTrustedSigner);
 
-        // Step 6: Call withdrawWithSignature
+        // Step 6: Call withdrawWithSignature to withdraw the tokens
         await vault
             .connect(user)
             .withdrawWithSignature(user.address, amount, nonce, message, expiry, signature);
 
-        // // Check user balance
+        // Verify user balance after withdrawal
         const userBalance = await tmkoc.balanceOf(user.address);
         expect(userBalance).to.equal(ethers.parseEther("600"));
 
-        // // Check vault balance
+        // Verify vault balance after withdrawal
         const vaultBalance = await tmkoc.balanceOf(vault.getAddress());
         expect(vaultBalance).to.equal(ethers.parseEther("400"));
     });
@@ -105,10 +93,10 @@ describe("ClubhouseVault", function () {
         await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
         await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
 
-        // Try invalid signature
+        // Generate an invalid signature using a different signer
         const amount = ethers.parseEther("200");
         const nonce = 2;
-        const expiry = (await time.latest()) + 60 * 60;
+        const expiry = (await time.latest()) + 60 * 60; // Expiry set to 1 hour from now
         const message = "Invalid withdrawal test";
 
         const messageHash = ethers.solidityPackedKeccak256(
@@ -116,14 +104,11 @@ describe("ClubhouseVault", function () {
             [user.address, amount, message, nonce]
         );
 
-        // Sign with a different signer
-        // const ethSignedHash = ethers.hashMessage(ethers.getBytes(messageHash));
         const invalidSignature = await otherSigner.signMessage(ethers.getBytes(messageHash));
-
         console.log("Invalid Signature: ", invalidSignature);
         console.log("OtherSigner Address: ", otherSigner.address);
 
-        // Verify the signers
+        // Verify the invalid signature
         const recoveredOtherSigner = ethers.verifyMessage(
             ethers.getBytes(messageHash),
             invalidSignature
@@ -131,10 +116,7 @@ describe("ClubhouseVault", function () {
 
         console.log("Recovered Trusted Signer : ", recoveredOtherSigner);
 
-        // await vault
-        //     .connect(user)
-        //     .withdrawWithSignature(user.address, amount, nonce, message, expiry, invalidSignature);
-        // Step 7: Expect the transaction to revert with "Invalid signature"
+        // Expect the transaction to revert due to invalid signature
         await expect(
             vault
                 .connect(user)
@@ -153,6 +135,7 @@ describe("ClubhouseVault", function () {
         // Pause the contract
         await vault.pause();
 
+        // Attempt withdrawal
         const amount = ethers.parseEther("100");
         const nonce = 1;
         const expiry = (await time.latest()) + 60 * 60;
@@ -166,23 +149,20 @@ describe("ClubhouseVault", function () {
         const ethSignedHash = ethers.hashMessage(ethers.getBytes(messageHash));
         const signature = await trustedSigner.signMessage(ethers.getBytes(ethSignedHash));
 
-        // Expect revert due to paused contract
+        // Expect the transaction to revert due to contract pause
         await expect(
             vault
                 .connect(user)
                 .withdrawWithSignature(user.address, amount, nonce, message, expiry, signature)
         ).to.be.revertedWithCustomError(vault, "EnforcedPause");
     });
+
     it("should deposit tokens, generate a withdrawTournamentFee signature hash, and withdrawTournamentFee with signature", async function () {
-        const { tmkoc, vault, user, trustedSigner, receiver, owner1, owner2 } = await deployFixtures();
+        const { tmkoc, vault, user, receiver, owner1, owner2 } = await deployFixtures();
 
-        // Step 1: Transfer tokens to user
+        // Transfer tokens, approve, and deposit
         await tmkoc.transfer(user.address, ethers.parseEther("1000"));
-
-        // Step 2: Approve the vault
         await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
-
-        // Step 3: Deposit tokens
         await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
 
         const vaultBalanceAfterDeposit = await tmkoc.balanceOf(vault.getAddress());
@@ -191,41 +171,28 @@ describe("ClubhouseVault", function () {
         expect(vaultBalanceAfterDeposit).to.equal(ethers.parseEther("500"));
         console.log("Vault Address: ", await vault.getAddress());
 
+        // Collect tournament fees
         await vault.collectTournamentFee(ethers.parseEther("150"));
 
-        // Step 4: Generate the withdraw signature hash
+        // Generate the signature hash for withdrawing tournament fees
         const amount = ethers.parseEther("100");
         const sendTo = receiver.address;
-        // const nonce = 1;
-        // const expiry = (await time.latest()) + 60 * 60; // 1 hour from now
-        // const message = "Withdrawal by user";
+   
         const VaultAddress = await vault.getAddress();
 
         const messageHash = ethers.solidityPackedKeccak256(
             ["address", "uint256", "address"],
             [sendTo, amount, VaultAddress]
         );
-        // const messageHash = await vault.getMessageHash(user1, amount, message, nonce);
         console.log("MessageHash: ", messageHash);
 
-        // // Step 5: Sign the hash with the trusted signer
-        // No need to do this 
-        // const ethSignedHash = ethers.hashMessage(arrayify(messageHash));
-        const ethSignedHash = ethers.hashMessage(ethers.getBytes(messageHash));
-        // console.log("Eth Signed Hash: ", ethSignedHash);
-
-        // const signature1 = await owner1.signMessage(arrayify(ethSignedHash));
-        // const ethSignedHash = ethers.hashMessage(arrayify(messageHash));
-        // const signature1 = await owner1.signMessage(arrayify(ethSignedHash));
-        // const signature1 = "0x2e39ec196ebd5d0276f0a98d02e7cb6e4e73c0a76bb00bffc34685320e2223e03fd63b76b0ecfa395ef435984ec28e6a3b73a2c7d2aff6971b34fc4f45ae8aa31b";
-        // 0x6fc8bd4e85b978ca7e09416433238b611f5b0580f1493085e19457e5c6fc31f50696ea118eae7a7ad6d8ce5051711fb936d053947cf515c5c6b131456f03a9281b
-
-        // const signature = await trustedSigner.signMessage(ethers.toBeArray(ethSignedHash));
+        // Sign the message hash with multi-sig owners
         const signature1 = await owner1.signMessage(ethers.getBytes(messageHash));
         const signature2 = await owner2.signMessage(ethers.getBytes(messageHash));
-        console.log("Signature: ", signature1, owner1.address);
+        console.log("Signature1: ", signature1, owner1.address);
+        console.log("Signature2: ", signature2, owner2.address);
 
-        // Verify the signers
+        // Verify the signatures
         const recoveredSigner1 = ethers.verifyMessage(
             ethers.getBytes(messageHash),
             signature1
@@ -238,28 +205,14 @@ describe("ClubhouseVault", function () {
         console.log("Recovered Signer 1: ", recoveredSigner1);
         console.log("Recovered Signer 2: ", recoveredSigner2);
 
-        // const signature2 = await owner2.signMessage(arrayify(ethSignedHash));
-        // const signature2 = await owner2.signMessage(arrayify(ethSignedHash));
-        // const signature2 = "0x4afad5c8bad70c48289fc3e1991bf25aadee3f0fe150be905959aaee7ce4848238311e833e80d0d0a320907e1274d9473dc1b25545ae2b3690fdf910dcd1cc761c"
-        // const signature = await trustedSigner.signMessage(ethers.toBeArray(ethSignedHash));
-        console.log("Signature2: ", signature2, owner2.address);
-
-        // Step 6: Call withdrawWithSignature
+        // Withdraw tournament fees
         await vault.withdrawTournamentFee(sendTo, amount, [signature1, signature2]);
 
-        // // // Check user balance
-        // const userBalance = await tmkoc.balanceOf(user.address);
-        // expect(userBalance).to.equal(ethers.parseEther("600"));
-
-        // // // Check vault balance
-        // const vaultBalance = await tmkoc.balanceOf(vault.getAddress());
-        // expect(vaultBalance).to.equal(ethers.parseEther("400"));
-
-        // Check if the tournament fees have been deducted
+        // Verify remaining tournament fees
         const remainingTournamentFees = await vault.totalTournamentFees();
         expect(remainingTournamentFees).to.equal(ethers.parseEther("50"));
 
-        // Check if the receiver received the amount
+        // Verify the receiver's balance
         const receiverBalance = await tmkoc.balanceOf(sendTo);
         expect(receiverBalance).to.equal(ethers.parseEther("100"));
 
