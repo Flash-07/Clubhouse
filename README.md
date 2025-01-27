@@ -35,6 +35,7 @@ cd clubhouse-vault
 
 ```bash
 npm install
+```
 
 ---
 
@@ -54,9 +55,11 @@ npm install
 ---
 
 ### Configuration
+
 ```
 PRIVATE_KEY=your_private_key
 ETHERSCAN_API_KEY=your_etherscan_api_key
+```
 
 ### Usage
 #### Compile Contracts
@@ -64,28 +67,33 @@ ETHERSCAN_API_KEY=your_etherscan_api_key
 Run the following command to compile the smart contracts:
 ```bash
 npx hardhat compile
+```
 
 #### Deploy Contracts
 
 To deploy the contracts to a local or test network, update the hardhat.config.ts with your desired network configuration. Then, run:
 ```bash
 npx hardhat run scripts/deploy.ts --network <network_name>
+```
 
 Example for deploying to a local Hardhat network:
 ```bash
 npx hardhat run scripts/deploy.ts --network localhost
+```
 
 #### Run Tests
 
 Execute the test suite to verify the functionality of the contracts:
 ```bash
 npx hardhat test
+```
 
 #### Verify Contracts
 
 To verify your contract on Etherscan (for testnets/mainnet), use:
 ```bash
 npx hardhat verify --network <network_name> <deployed_contract_address>
+```
 
 ### Testing
 
@@ -99,6 +107,7 @@ The project includes a robust test suite written in TypeScript using Hardhat and
 Run tests using:
 ```bash
 npx hardhat test
+```
 
 ---
 
