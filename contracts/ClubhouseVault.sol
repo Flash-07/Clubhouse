@@ -6,6 +6,9 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
+// import "hardhat/con"
+
+import "hardhat/console.sol";
 
 /**
  * @title ClubhouseVault
@@ -193,7 +196,6 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         bytes calldata signature
     ) external nonReentrant whenNotPaused {
         require(block.timestamp <= expiry, "Signature expired");
-        // require(!usedNonces[nonce], "Nonce already used");
         require(!usedNonces[caller][nonce], "Nonce already used");
         require(
             tmkocToken.balanceOf(address(this)) >= amount,
@@ -201,7 +203,6 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         );
         require(trustedSigner != address(0), "Trusted signer not set");
 
-        // usedNonces[nonce] = true;
         usedNonces[caller][nonce] = true;
 
         bytes32 messageHash = getMessageHash(caller, amount, message, nonce);
@@ -209,106 +210,204 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
 
         // Recover the signer using ECDSA.recover
-        // address _signer = ECDSA.recover(ethSignedHash, signature);
         ECDSA.recover(ethSignedHash, signature) == trustedSigner;
-        // require(
-        //     ECDSA.recover(ethSignedHash, signature) == trustedSigner,
-        //     "Invalid signature"
-        // );
-        // Recover the signer from the signature
-        // address recoveredSigner = ECDSA.recover(ethSignedHash, signature);
-        // emit DebugSigner(recoveredSigner); // Add a debug event for recovered signer
-        // require(recoveredSigner == trustedSigner, "Invalid signature recoveredSigner is not equal to trustedSigner");
-
-        // require(_signer == trustedSigner, "Invalid signature");
+        // address recoverSinger = ECDSA.recover(ethSignedHash, signature);
+        // require(recoverSinger == trustedSigner,"Invalid singature");
 
         require(tmkocToken.transfer(caller, amount), "Transfer failed");
         emit WithdrawalWithSignature(caller, amount, nonce);
     }
 
-    /**
-     * @dev Executes an emergency withdrawal using multi-signature approval.
-     * @param to Address to receive the withdrawn tokens.
-     * @param amount Amount of tokens to withdraw.
-     * @param expiry Expiry timestamp for the signatures.
-     * @param signatures Array of signatures from the multi-signature owners.
+      /**
+     * @dev Generates a hash of the withdrawal message.
+     * @param _to Address of the user where amount is withdrawing.
+     * @param _amount Amount of tokens to withdraw.
+     * @return The hashed withdrawal message.
      */
-    function emergencyWithdrawMultiSig(
+    function getMessageHashForOwnerWithdrawal(
+        address _to,
+        uint256 _amount,
+        address _thisContract
+    ) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(_to, _amount, _thisContract));
+    }
+
+   
+    // function emergencyWithdrawMultiSig(
+    //     address to,
+    //     uint256 amount,
+    //     uint256 expiry,
+    //     bytes[] calldata signatures
+    // ) external nonReentrant whenNotPaused {
+    //     require(to != address(0), "Invalid 'to' address");
+    //     require(amount > 0, "Amount must be > 0");
+    //     require(
+    //         tmkocToken.balanceOf(address(this)) >= amount,
+    //         "Insufficient balance"
+    //     );
+ 
+    //     require(block.timestamp <= expiry, "Signature expired");
+
+    //     // Create the message hash that owners must have signed:
+    //     // Contract address to avoid cross-contract replay
+    //     bytes32 messageHash = keccak256(
+    //         abi.encodePacked("EMERGENCY_WITHDRAW", to, amount, address(this))
+    //     );
+    //     bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
+
+    //     // Track which owners have signed (avoid double-counting the same owner)
+    //     uint256 validSignatures = 0;
+       
+    //     bool[] memory seenSigners = new bool[](multiSigOwners.length);
+
+    //     // Limit the number of signatures to the number of multi-sig owners
+    //     require(
+    //         signatures.length <= multiSigOwners.length,
+    //         "Too many signatures"
+    //     );
+
+    //     for (uint256 i = 0; i < signatures.length; i++) {
+    //         address signer = ECDSA.recover(ethSignedHash, signatures[i]);
+    //         for (uint256 j = 0; j < multiSigOwners.length; j++) {
+    //             if (multiSigOwners[j] == signer && !seenSigners[j]) {
+    //                 seenSigners[j] = true;
+    //                 validSignatures++;
+    //                 break; // Exit inner loop early for efficiency
+    //             }
+    //         }
+    //     }
+
+    //     require(
+    //         validSignatures >= minApprovals,
+    //         "Not enough valid owner signatures"
+    //     );
+
+    //     // Now execute the emergency withdrawal
+    //     bool success = tmkocToken.transfer(to, amount);
+    //     require(success, "Transfer failed");
+
+    //     emit EmergencyWithdrawal(to, amount);
+    // }
+
+     // Emergency Withdraw with Multi-Signature Approval
+    function emergencyWithdraw(
         address to,
         uint256 amount,
-        uint256 expiry,
         bytes[] calldata signatures
-    ) external nonReentrant whenNotPaused {
-        require(to != address(0), "Invalid 'to' address");
+    ) external onlyOwner nonReentrant whenNotPaused {
+        require(to != address(0), "Invalid recipient address");
         require(amount > 0, "Amount must be > 0");
         require(
             tmkocToken.balanceOf(address(this)) >= amount,
             "Insufficient balance"
         );
-        // require(
-        //     minApprovals > 0 && minApprovals <= multiSigOwners.length,
-        //     "Multi-sig not set"
-        // );
-        require(block.timestamp <= expiry, "Signature expired");
-
-        // Create the message hash that owners must have signed:
-        // We might include the contract address to avoid cross-contract replay
-        bytes32 messageHash = keccak256(
-            abi.encodePacked("EMERGENCY_WITHDRAW", to, amount, address(this))
+        require(
+            signatures.length >= minApprovals,
+            "Not enough valid owner signatures"
         );
+
+        // bytes32 messageHash = keccak256(
+        //     abi.encodePacked(to, amount, address(this))
+        // );
+        // bytes32 ethSignedHash = ECDSA.toEthSignedMessageHash(messageHash);
+
+        bytes32 messageHash = getMessageHashForOwnerWithdrawal(to, amount, address(this));
         bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
 
-        // Track which owners have signed (avoid double-counting the same owner)
+        // Validate signatures
         uint256 validSignatures = 0;
-        // address[] memory seenOwners = new address[](multiSigOwners.length);
-
-        // for (uint256 i = 0; i < signatures.length; i++) {
-        //     address signer = ECDSA.recover(ethSignedHash, signatures[i]);
-        //     // Must be one of the multiSigOwners
-        //     if (_isMultiSigOwner(signer)) {
-        //         // Check we haven't already counted this owner
-        //         bool alreadyCounted = false;
-        //         for (uint256 j = 0; j < validSignatures; j++) {
-        //             if (seenOwners[j] == signer) {
-        //                 alreadyCounted = true;
-        //                 break;
-        //             }
-        //         }
-        //         if (!alreadyCounted) {
-        //             seenOwners[validSignatures] = signer;
-        //             validSignatures++;
-        //         }
-        //     }
-        // }
-        bool[] memory seenSigners = new bool[](multiSigOwners.length);
-
-        // Limit the number of signatures to the number of multi-sig owners
-        require(
-            signatures.length <= multiSigOwners.length,
-            "Too many signatures"
-        );
+        bool[] memory hasSigned = new bool[](multiSigOwners.length);
 
         for (uint256 i = 0; i < signatures.length; i++) {
             address signer = ECDSA.recover(ethSignedHash, signatures[i]);
             for (uint256 j = 0; j < multiSigOwners.length; j++) {
-                if (multiSigOwners[j] == signer && !seenSigners[j]) {
-                    seenSigners[j] = true;
+                if (
+                    multiSigOwners[j] == signer &&
+                    !hasSigned[j]
+                ) {
+                    hasSigned[j] = true;
                     validSignatures++;
-                    break; // Exit inner loop early for efficiency
+                    break;
                 }
             }
         }
 
-        require(
-            validSignatures >= minApprovals,
-            "Not enough valid owner signatures"
-        );
+        require(validSignatures >= minApprovals, "Not enough valid signatures");
 
-        // Now execute the emergency withdrawal
+        // Execute the withdrawal
         bool success = tmkocToken.transfer(to, amount);
         require(success, "Transfer failed");
 
         emit EmergencyWithdrawal(to, amount);
+    }
+
+    // Withdraw Tournament Fee with Multi-Signature Approval
+    function withdrawTournamentFee(
+        address to,
+        uint256 amount,
+        bytes[] calldata signatures
+    ) external onlyOwner nonReentrant whenNotPaused {
+        require(to != address(0), "Invalid recipient address");
+        require(amount > 0, "Amount must be > 0");
+        require(
+            totalTournamentFees >= amount,
+            "Insufficient tournament fees"
+        );
+        require(
+            signatures.length >= minApprovals,
+            "Not enough valid owner signatures"
+        );
+
+        // bytes32 messageHash = keccak256(
+        //     abi.encodePacked(to, amount, address(this))
+        // );
+        // bytes32 ethSignedHash = ECDSA.toEthSignedMessageHash(messageHash);
+        bytes32 messageHash = getMessageHashForOwnerWithdrawal(to, amount, address(this));
+        bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
+        console.log("hash ");
+        console.logBytes32(ethSignedHash);
+
+        // Validate signatures
+        uint256 validSignatures = 0;
+        bool[] memory hasSigned = new bool[](multiSigOwners.length);
+
+
+        console.log("valid signature");
+        console.log(validSignatures);
+
+        for (uint256 i = 0; i < signatures.length; i++) {
+        console.log("sig");
+        console.logBytes(signatures[i]);
+        // address signer = recoverSigner(ethSignedHash, signatures[i]);
+        address signer = ECDSA.recover(ethSignedHash, signatures[i]);
+            // address signer = ;
+            console.log("singer");
+            console.log(signer);
+            for (uint256 j = 0; j < multiSigOwners.length; j++) {
+                if (
+                     signer == multiSigOwners[j] &&
+                    !hasSigned[j]
+                ) {
+                    console.log("inside if");
+                    hasSigned[j] = true;
+                    validSignatures++;
+                    break;
+                }
+            }
+        }
+        console.log("valid signature");
+        console.log(validSignatures);
+        console.log(minApprovals);
+        require(validSignatures >= minApprovals, "Not enough valid signatures");
+
+        // Deduct from tournament fees
+        totalTournamentFees -= amount;
+
+        // Execute the withdrawal
+        bool success = tmkocToken.transfer(to, amount);
+        require(success, "Transfer failed");
+
+        // emit TournamentFeeWithdrawal(to, amount);
     }
 
     function pause() external onlyOwner {
@@ -318,4 +417,55 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
     function unpause() external onlyOwner {
         _unpause();
     }
+
+    // function verify(
+    //     address _signer,
+    //     address _to,
+    //     uint256 _amount,
+    //     string memory _message,
+    //     uint256 _nonce,
+    //     bytes memory signature
+    // ) public pure returns (bool) {
+    //     bytes32 messageHash = getMessageHash(_to, _amount, _message, _nonce);
+    //     bytes32 ethSignedMessageHash = getEthSignedMessageHash(messageHash);
+
+    //     return recoverSigner(ethSignedMessageHash, signature) == _signer;
+    // }
+
+    // function recoverSigner(
+    //     bytes32 _ethSignedMessageHash,
+    //     bytes memory _signature
+    // ) public pure returns (address) {
+    //     (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
+
+    //     return ecrecover(_ethSignedMessageHash, v, r, s);
+    // }
+
+    // function splitSignature(bytes memory sig)
+    //     public
+    //     pure
+    //     returns (bytes32 r, bytes32 s, uint8 v)
+    // {
+    //     require(sig.length == 65, "invalid signature length");
+
+    //     assembly {
+    //         /*
+    //         First 32 bytes stores the length of the signature
+
+    //         add(sig, 32) = pointer of sig + 32
+    //         effectively, skips first 32 bytes of signature
+
+    //         mload(p) loads next 32 bytes starting at the memory address p into memory
+    //         */
+
+    //         // first 32 bytes, after the length prefix
+    //         r := mload(add(sig, 32))
+    //         // second 32 bytes
+    //         s := mload(add(sig, 64))
+    //         // final byte (first byte of the next 32 bytes)
+    //         v := byte(0, mload(add(sig, 96)))
+    //     }
+
+    //     // implicitly return (r, s, v)
+    // }
 }
