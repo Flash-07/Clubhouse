@@ -67,9 +67,9 @@ describe("ClubhouseVault", function () {
         console.log("MessageHash: ", messageHash);
 
         // // Step 5: Sign the hash with the trusted signer
-        const ethSignedHash = ethers.hashMessage(arrayify(messageHash));
+        const ethSignedHash = ethers.hashMessage(ethers.getBytes(messageHash));
         console.log("Eth Signed Hash: ", ethSignedHash);
-        const signature = await trustedSigner.signMessage(arrayify(ethSignedHash));
+        const signature = await trustedSigner.signMessage(ethers.getBytes(ethSignedHash));
         // const signature = await trustedSigner.signMessage(ethers.toBeArray(ethSignedHash));
         console.log("Signature: ", signature);
         console.log("User Address: ", user.address);
@@ -108,8 +108,8 @@ describe("ClubhouseVault", function () {
         );
 
         // Sign with a different signer
-        const ethSignedHash = ethers.hashMessage(arrayify(messageHash));
-        const invalidSignature = await otherSigner.signMessage(arrayify(ethSignedHash));
+        const ethSignedHash = ethers.hashMessage(ethers.getBytes(messageHash));
+        const invalidSignature = await otherSigner.signMessage(ethers.getBytes(ethSignedHash));
 
         await vault
             .connect(user)
@@ -137,8 +137,8 @@ describe("ClubhouseVault", function () {
             [user.address, amount, message, nonce]
         );
 
-        const ethSignedHash = ethers.hashMessage(arrayify(messageHash));
-        const signature = await trustedSigner.signMessage(arrayify(ethSignedHash));
+        const ethSignedHash = ethers.hashMessage(ethers.getBytes(messageHash));
+        const signature = await trustedSigner.signMessage(ethers.getBytes(ethSignedHash));
 
         // Expect revert due to paused contract
         await expect(
@@ -185,20 +185,36 @@ describe("ClubhouseVault", function () {
         // // Step 5: Sign the hash with the trusted signer
         // No need to do this 
         // const ethSignedHash = ethers.hashMessage(arrayify(messageHash));
+        const ethSignedHash = ethers.hashMessage(ethers.getBytes(messageHash));
         // console.log("Eth Signed Hash: ", ethSignedHash);
 
         // const signature1 = await owner1.signMessage(arrayify(ethSignedHash));
         // const ethSignedHash = ethers.hashMessage(arrayify(messageHash));
-        // const signature1 = owner1.signMessage(arrayify(ethSignedHash));
-        const signature1 = "0x2e39ec196ebd5d0276f0a98d02e7cb6e4e73c0a76bb00bffc34685320e2223e03fd63b76b0ecfa395ef435984ec28e6a3b73a2c7d2aff6971b34fc4f45ae8aa31b";
+        // const signature1 = await owner1.signMessage(arrayify(ethSignedHash));
+        // const signature1 = "0x2e39ec196ebd5d0276f0a98d02e7cb6e4e73c0a76bb00bffc34685320e2223e03fd63b76b0ecfa395ef435984ec28e6a3b73a2c7d2aff6971b34fc4f45ae8aa31b";
         // 0x6fc8bd4e85b978ca7e09416433238b611f5b0580f1493085e19457e5c6fc31f50696ea118eae7a7ad6d8ce5051711fb936d053947cf515c5c6b131456f03a9281b
 
         // const signature = await trustedSigner.signMessage(ethers.toBeArray(ethSignedHash));
+        const signature1 = await owner1.signMessage(ethers.getBytes(messageHash));
+        const signature2 = await owner2.signMessage(ethers.getBytes(messageHash));
         console.log("Signature: ", signature1, owner1.address);
 
+        // Verify the signers
+        const recoveredSigner1 = ethers.verifyMessage(
+            ethers.getBytes(messageHash),
+            signature1
+        );
+        const recoveredSigner2 = ethers.verifyMessage(
+            ethers.getBytes(messageHash),
+            signature2
+        );
+
+        console.log("Recovered Signer 1: ", recoveredSigner1);
+        console.log("Recovered Signer 2: ", recoveredSigner2);
+
         // const signature2 = await owner2.signMessage(arrayify(ethSignedHash));
-        // const signature2 = owner2.signMessage(arrayify(ethSignedHash));
-        const signature2 = "0x4afad5c8bad70c48289fc3e1991bf25aadee3f0fe150be905959aaee7ce4848238311e833e80d0d0a320907e1274d9473dc1b25545ae2b3690fdf910dcd1cc761c"
+        // const signature2 = await owner2.signMessage(arrayify(ethSignedHash));
+        // const signature2 = "0x4afad5c8bad70c48289fc3e1991bf25aadee3f0fe150be905959aaee7ce4848238311e833e80d0d0a320907e1274d9473dc1b25545ae2b3690fdf910dcd1cc761c"
         // const signature = await trustedSigner.signMessage(ethers.toBeArray(ethSignedHash));
         console.log("Signature2: ", signature2, owner2.address);
 
