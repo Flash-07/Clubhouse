@@ -16,28 +16,28 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
     using ECDSA for bytes32;
 
-    // ERC20 token managed by the vault
+    /// ERC20 token managed by the vault
     IERC20 public tmkocToken;
 
-    // Authorized signer for user withdrawals
+    /// Authorized signer for user withdrawals
     address public trustedSigner;
 
-    // Total tournament fees collected
+    /// Total tournament fees collected
     uint256 public totalTournamentFees;
 
-    // Tracks used nonces to prevent replay attacks
+    /// Tracks used nonces to prevent replay attacks
     mapping(address => mapping(uint256 => bool)) public usedNonces;
 
-    // Mapping of valid multi-signature signers
+    /// Mapping of valid multi-signature signers
     mapping(address => bool) public isMultiSigOwner;
 
-    // Multi-signature owners for emergency withdrawals
+    /// Multi-signature owners for emergency withdrawals
     address[] public multiSigOwners;
 
-    // Minimum number of approvals required for multi-signature actions
+    /// Minimum number of approvals required for multi-signature actions
     uint256 public minApprovals;
 
-    // Events for logging key actions and changes
+    /// Events for logging key actions and changes
     event TokensDeposited(address indexed user, uint256 amount);
     event WithdrawalWithSignature(
         address indexed user,
@@ -78,12 +78,12 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
             "Invalid minApprovals"
         );
 
-        // Clear previous multi-signature owners
+        /// Clear previous multi-signature owners
         for (uint256 i = 0; i < multiSigOwners.length; i++) {
             isMultiSigOwner[multiSigOwners[i]] = false;
         }
 
-        // Update the owners and mapping
+        /// Update the owners and mapping
         for (uint256 i = 0; i < owners.length; i++) {
             isMultiSigOwner[owners[i]] = true;
         }
@@ -193,13 +193,13 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
 
         usedNonces[caller][nonce] = true;
 
-        // Generate and verify the signature hash
+        /// Generate and verify the signature hash
         bytes32 messageHash = getMessageHash(caller, amount, message, nonce);
         bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
-        address recoverSinger = ECDSA.recover(ethSignedHash, signature);
-        require(recoverSinger == trustedSigner, "Invalid signature");
+        address recoverSigner = ECDSA.recover(ethSignedHash, signature);
+        require(recoverSigner == trustedSigner, "Invalid signature");
 
-        // Execute the token transfer
+        /// Execute the token transfer
         require(tmkocToken.transfer(caller, amount), "Transfer failed");
         emit WithdrawalWithSignature(caller, amount, nonce);
     }
@@ -240,7 +240,7 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
             "Not enough valid owner signatures"
         );
 
-        // Verify the multi-signature approvals
+        /// Verify the multi-signature approvals
         bytes32 messageHash = getMessageHashForOwnerWithdrawal(
             to,
             amount,
@@ -264,7 +264,7 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
 
         require(validSignatures >= minApprovals, "Not enough valid signatures");
 
-        // Execute the withdrawal
+        /// Execute the withdrawal
         bool success = tmkocToken.transfer(to, amount);
         require(success, "Transfer failed");
 
@@ -297,12 +297,12 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         );
         bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
 
-        // Validate signatures
+        /// Validate signatures
         uint256 validSignatures = 0;
         bool[] memory hasSigned = new bool[](multiSigOwners.length);
 
         for (uint256 i = 0; i < signatures.length; i++) {
-            // address signer = recoverSigner(ethSignedHash, signatures[i]);
+            /// address signer = recoverSigner(ethSignedHash, signatures[i]);
             address signer = ECDSA.recover(ethSignedHash, signatures[i]);
             for (uint256 j = 0; j < multiSigOwners.length; j++) {
                 if (signer == multiSigOwners[j] && !hasSigned[j]) {
@@ -314,14 +314,14 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         }
         require(validSignatures >= minApprovals, "Not enough valid signatures");
 
-        // Deduct from tournament fees
+        /// Deduct from tournament fees
         totalTournamentFees -= amount;
 
-        // Execute the withdrawal
+        /// Execute the withdrawal
         bool success = tmkocToken.transfer(to, amount);
         require(success, "Transfer failed");
 
-        // Emit an event to log the successful withdrawal
+        /// Emit an event to log the successful withdrawal
         emit TournamentFeesWithdrawn(to, amount);
     }
 
