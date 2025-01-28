@@ -2,6 +2,7 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-verify";
 import "@matterlabs/hardhat-zksync";
+import "./tasks/generate-docs";
 
 // Load environment variables from a .env file
 import * as dotenv from "dotenv";
@@ -93,6 +94,17 @@ const config: HardhatUserConfig = {
         enabled: true,
         runs: 200,
       },
+      outputSelection: {
+        "*": {
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "userdoc",
+            "devdoc"
+          ],
+        },
+      },     
     },
   },
 
