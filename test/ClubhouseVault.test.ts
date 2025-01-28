@@ -219,5 +219,60 @@ describe("ClubhouseVault", function () {
         // console.log("Receiver Balance After Withdrawal: ", receiverBalance.toString());
     });
 
+    it("should deposit tokens, generate a emergencyWithdraw signature hash, and emergencyWithdraw with signature", async function () {
+        const { tmkoc, vault, user, receiver, owner1, owner2 } = await deployFixtures();
+
+        // Transfer tokens, approve, and deposit
+        await tmkoc.transfer(user.address, ethers.parseEther("1000"));
+        await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
+        await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+
+        const vaultBalanceAfterDeposit = await tmkoc.balanceOf(vault.getAddress());
+        // console.log("Vault Balance After Deposit: ", vaultBalanceAfterDeposit);
+
+        expect(vaultBalanceAfterDeposit).to.equal(ethers.parseEther("500"));
+        // console.log("Vault Address: ", await vault.getAddress());
+
+        // Generate the signature hash for withdrawing tournament fees
+        const amount = ethers.parseEther("100");
+        const sendTo = receiver.address;
+   
+        const VaultAddress = await vault.getAddress();
+
+        const messageHash = ethers.solidityPackedKeccak256(
+            ["address", "uint256", "address"],
+            [sendTo, amount, VaultAddress]
+        );
+        // console.log("MessageHash: ", messageHash);
+
+        // Sign the message hash with multi-sig owners
+        const signature1 = await owner1.signMessage(ethers.getBytes(messageHash));
+        const signature2 = await owner2.signMessage(ethers.getBytes(messageHash));
+        // console.log("Signature1: ", signature1, owner1.address);
+        // console.log("Signature2: ", signature2, owner2.address);
+
+        // Verify the signatures
+        const recoveredSigner1 = ethers.verifyMessage(
+            ethers.getBytes(messageHash),
+            signature1
+        );
+        const recoveredSigner2 = ethers.verifyMessage(
+            ethers.getBytes(messageHash),
+            signature2
+        );
+
+        // console.log("Recovered Signer 1: ", recoveredSigner1);
+        // console.log("Recovered Signer 2: ", recoveredSigner2);
+
+        // Withdraw tournament fees
+        await vault.emergencyWithdraw(sendTo, amount, [signature1, signature2]);
+
+        // Verify the receiver's balance
+        const receiverBalance = await tmkoc.balanceOf(sendTo);
+        expect(receiverBalance).to.equal(ethers.parseEther("100"));
+
+        // console.log("Receiver Balance After Withdrawal: ", receiverBalance.toString());
+    });
+
 });
 
