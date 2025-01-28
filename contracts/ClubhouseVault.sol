@@ -125,21 +125,22 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
     }
 
     /// @notice Allows users to deposit tokens into the vault
-    /// @dev This function securely transfers tokens from the caller to the vault contract.
+    /// @dev This function securely transfers tokens from the caller (msg.sender) to the vault contract.
     /// It requires the contract to be unpaused and ensures the deposit amount is greater than zero.
-    /// @param caller Address depositing tokens
     /// @param amount Amount of tokens being deposited
-    function deposit(
-        address caller,
-        uint256 amount
-    ) external nonReentrant whenNotPaused {
-        require(caller == msg.sender && caller != address(0), "Caller must be sender and valid");
+    function deposit(uint256 amount) external nonReentrant whenNotPaused {
+        require(msg.sender != address(0), "Invalid sender address");
         require(amount > 0, "Amount must be greater than 0");
 
-        bool success = tmkocToken.transferFrom(caller, address(this), amount);
+        // Transfer tokens from msg.sender to the vault
+        bool success = tmkocToken.transferFrom(
+            msg.sender,
+            address(this),
+            amount
+        );
         require(success, "Transfer failed");
 
-        emit TokensDeposited(caller, amount);
+        emit TokensDeposited(msg.sender, amount);
     }
 
     /// @notice Collects tournament fees into the contract
