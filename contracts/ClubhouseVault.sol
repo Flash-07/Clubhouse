@@ -133,8 +133,8 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         address caller,
         uint256 amount
     ) external nonReentrant whenNotPaused {
+        require(caller == msg.sender && caller != address(0), "Caller must be sender and valid");
         require(amount > 0, "Amount must be greater than 0");
-        require(caller != address(0), "Invalid recipient address");
 
         bool success = tmkocToken.transferFrom(caller, address(this), amount);
         require(success, "Transfer failed");
