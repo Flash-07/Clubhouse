@@ -38,7 +38,8 @@ describe("ClubhouseVault", function () {
         await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
 
         // Step 3: Deposit tokens into the vault
-        await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+        // await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+        await vault.connect(user).deposit(ethers.parseEther("500"));
 
         // Check vault balance after deposit
         const vaultBalanceAfterDeposit = await tmkoc.balanceOf(vault.getAddress());
@@ -91,7 +92,7 @@ describe("ClubhouseVault", function () {
         // Transfer tokens, approve, and deposit
         await tmkoc.transfer(user.address, ethers.parseEther("1000"));
         await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
-        await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+        await vault.connect(user).deposit(ethers.parseEther("500"));
 
         // Generate an invalid signature using a different signer
         const amount = ethers.parseEther("200");
@@ -130,7 +131,7 @@ describe("ClubhouseVault", function () {
         // Transfer tokens, approve, and deposit
         await tmkoc.transfer(user.address, ethers.parseEther("1000"));
         await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
-        await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+        await vault.connect(user).deposit(ethers.parseEther("500"));
 
         // Pause the contract
         await vault.pause();
@@ -163,7 +164,7 @@ describe("ClubhouseVault", function () {
         // Transfer tokens, approve, and deposit
         await tmkoc.transfer(user.address, ethers.parseEther("1000"));
         await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
-        await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+        await vault.connect(user).deposit(ethers.parseEther("500"));
 
         const vaultBalanceAfterDeposit = await tmkoc.balanceOf(vault.getAddress());
         // console.log("Vault Balance After Deposit: ", vaultBalanceAfterDeposit);
@@ -225,7 +226,7 @@ describe("ClubhouseVault", function () {
         // Transfer tokens, approve, and deposit
         await tmkoc.transfer(user.address, ethers.parseEther("1000"));
         await tmkoc.connect(user).approve(vault.getAddress(), ethers.parseEther("1000"));
-        await vault.connect(user).deposit(user.address, ethers.parseEther("500"));
+        await vault.connect(user).deposit(ethers.parseEther("500"));
 
         const vaultBalanceAfterDeposit = await tmkoc.balanceOf(vault.getAddress());
         // console.log("Vault Balance After Deposit: ", vaultBalanceAfterDeposit);
