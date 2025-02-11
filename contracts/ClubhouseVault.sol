@@ -190,14 +190,14 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
     /// @dev This function verifies the off-chain signature using the trusted signer,
     /// ensures the nonce is unique, and checks that the signature has not expired.
     /// It also validates the contract's token balance before transferring the tokens.
-    /// @param caller Address of the user withdrawing tokens.
+    /// @param recipient Address of the user withdrawing tokens.
     /// @param amount Amount of tokens to withdraw.
     /// @param nonce Unique nonce for the withdrawal.
     /// @param message Additional withdrawal details.
     /// @param expiry Expiry timestamp for the signature.
     /// @param signature Off-chain signature validating the withdrawal.
     function withdrawWithSignature(
-        address caller,
+        address recipient,
         uint256 amount,
         uint256 nonce,
         string memory message,
@@ -205,23 +205,23 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         bytes calldata signature
     ) external nonReentrant whenNotPaused {
         require(block.timestamp <= expiry, "Signature expired");
-        require(!usedNonces[caller][nonce], "Nonce already used");
+        require(!usedNonces[recipient][nonce], "Nonce already used");
         require(
             tmkocToken.balanceOf(address(this)) >= amount,
             "Insufficient contract balance"
         );
         require(trustedSigner != address(0), "Trusted signer not set");
 
-        usedNonces[caller][nonce] = true;
+        usedNonces[recipient][nonce] = true;
 
-        bytes32 messageHash = getMessageHash(caller, amount, message, nonce);
+        bytes32 messageHash = getMessageHash(recipient, amount, message, nonce);
         bytes32 ethSignedHash = getEthSignedMessageHash(messageHash);
         address recoverSigner = ECDSA.recover(ethSignedHash, signature);
 
         require(recoverSigner == trustedSigner, "Invalid signature");
-        require(tmkocToken.transfer(caller, amount), "Transfer failed");
+        require(tmkocToken.transfer(recipient, amount), "Transfer failed");
 
-        emit WithdrawalWithSignature(caller, amount, nonce);
+        emit WithdrawalWithSignature(recipient, amount, nonce);
     }
 
     /// @notice Generates a hash of the withdrawal message.
