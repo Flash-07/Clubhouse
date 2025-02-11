@@ -164,7 +164,11 @@ contract ClubhouseMain is ReentrancyGuard, Ownable, Pausable {
         tmkocPermitToken.permit(user, address(this), amount, deadline, v, r, s);
 
         // Transfer tokens from user to vault
-        bool success = IERC20(address(tmkocToken)).transferFrom(user, address(this), amount);
+        bool success = IERC20(address(tmkocToken)).transferFrom(
+            user,
+            address(this),
+            amount
+        );
         require(success, "Transfer failed");
 
         emit TokensDeposited(user, amount);
@@ -249,6 +253,27 @@ contract ClubhouseMain is ReentrancyGuard, Ownable, Pausable {
         require(tmkocToken.transfer(recipient, amount), "Transfer failed");
 
         emit WithdrawalWithSignature(recipient, amount, nonce);
+    }
+
+    /// @notice Allows the owner to withdraw tokens to a user
+    /// @dev This function is called automatically by the backend system.
+    /// @param recipient Address of the user withdrawing tokens.
+    /// @param amount Amount of tokens to withdraw.
+    function withdrawToUser(
+        address recipient,
+        uint256 amount
+    ) external onlyOwner nonReentrant whenNotPaused {
+        require(recipient != address(0), "Invalid recipient address");
+        require(amount > 0, "Amount must be > 0");
+        require(
+            tmkocToken.balanceOf(address(this)) >= amount,
+            "Insufficient contract balance"
+        );
+
+        bool success = tmkocToken.transfer(recipient, amount);
+        require(success, "Transfer failed");
+
+        emit WithdrawalWithSignature(recipient, amount, 0);
     }
 
     /// @notice Generates a hash of the withdrawal message.
