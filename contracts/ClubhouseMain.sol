@@ -1,22 +1,26 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /// @title ClubhouseVault
 /// @author Neela Mediatech Private Limited
 /// @notice Manages ERC20 token deposits, withdrawals with off-chain signatures,
 /// and multi-signature emergency withdrawals.
 /// @dev Designed for secure and scalable tournament fee collection and payouts.
-contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
+contract ClubhouseMain is ReentrancyGuard, Ownable, Pausable {
     using ECDSA for bytes32;
 
     /// @notice ERC20 token managed by the vault
     IERC20 public tmkocToken;
+
+    /// @notice ERC20Permit managed by the vault
+    IERC20Permit public tmkocPermitToken;
 
     /// @notice Address authorized to sign off-chain user withdrawal requests
     address public trustedSigner;
@@ -83,6 +87,7 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
     constructor(address _tokenAddress) Ownable(msg.sender) {
         require(_tokenAddress != address(0), "Invalid token address");
         tmkocToken = IERC20(_tokenAddress);
+        tmkocPermitToken = IERC20Permit(_tokenAddress);
     }
 
     /// @notice Sets multi-signature owners and minimum approvals
@@ -141,6 +146,28 @@ contract ClubhouseVault is ReentrancyGuard, Ownable, Pausable {
         require(success, "Transfer failed");
 
         emit TokensDeposited(msg.sender, amount);
+    }
+
+    /// @notice Deposits tokens using a meta transaction
+    /// @dev The backend relayer submits this on behalf of the user
+    function depositWithMetaTx(
+        address user,
+        uint256 amount,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external nonReentrant whenNotPaused {
+        require(msg.sender == trustedSigner, "Only relayer can call");
+
+        // Call permit function in TMKOC token
+        tmkocPermitToken.permit(user, address(this), amount, deadline, v, r, s);
+
+        // Transfer tokens from user to vault
+        bool success = IERC20(address(tmkocToken)).transferFrom(user, address(this), amount);
+        require(success, "Transfer failed");
+
+        emit TokensDeposited(user, amount);
     }
 
     /// @notice Collects tournament fees into the contract
