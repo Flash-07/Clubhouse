@@ -11,7 +11,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 /// @author Neela Mediatech Private Limited
 /// @notice Manages ERC20 token deposits and withdrawals with off-chain signatures.
 /// @dev Designed for secure and scalable tournament fee collection and payouts.
-contract ClubhouseLogic is ReentrancyGuard, Ownable, Pausable {
+contract ClubhouseMain is ReentrancyGuard, Ownable, Pausable {
     using ECDSA for bytes32;
 
     /// @notice ERC20 token managed by the vault
