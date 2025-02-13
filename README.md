@@ -46,9 +46,14 @@ npm install
 │   ├── ClubhouseVault.sol         # Main Vault contract
 │   ├── TaarakMehtaKaOoltahChashmash.sol  # ERC20 Token contract
 ├── test
+│   ├── ClubhouseMain.test.ts      # Tests for the Main contract
 │   ├── ClubhouseVault.test.ts     # Tests for the Vault contract
-├── scripts
-│   ├── deploy.ts                  # Deployment script
+├── scripts (ignition)
+│   ├── Deploy.ts                  # Deployment script of TMKOC and ClubhouseMain
+│   ├── TMKOC.ts                   # Deployment script TMKOC
+│   ├── ClubhouseMain.ts           # Deployment script ClubhouseMain
+│   ├── ClubhouseVault.ts          # Deployment script of ClubhouseVault
+│   ├── Interact.ts                # Interaction script to fund the account
 ├── .env                           # Environment variables
 ├── hardhat.config.ts              # Hardhat configuration file
 └── README.md                      # Project documentation
