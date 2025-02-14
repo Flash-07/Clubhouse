@@ -287,7 +287,7 @@ describe("ClubhouseMain", function () {
 
         // Get domain separator and nonce
         const domain = {
-            name: "TaarakMehtaKaOoltah",
+            name: "TaarakMehtaKaOoltahChashmah",
             version: "1",
             chainId: await ethers.provider.getNetwork().then((n) => n.chainId),
             verifyingContract: await tmkoc.getAddress(),
