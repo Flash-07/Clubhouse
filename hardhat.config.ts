@@ -70,11 +70,23 @@ const config: HardhatUserConfig = {
   },
 
   etherscan: {
-    apiKey: {
+    customChains: [
+      {
+        network: "somnia",
+        chainId: 50312,
+        urls: {
+          apiURL: "https://somnia-poc.w3us.site/api",
+          browserURL: "https://somnia-poc.w3us.site"
+        },
+      },
+    ],
+    apiKey: 
+    {
       mainnet: process.env.ETHERSCAN_API_KEY || "",
       polygonAmoy: process.env.POLYGONSCAN_API_KEY || "",
       optimism: process.env.OPTIMISM_API_KEY || "",
       arbitrum: process.env.ARBITRUM_API_KEY || "",
+      somnia:  "Somnia-verify-api-key",
     },
   },
 
