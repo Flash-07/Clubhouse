@@ -10,7 +10,7 @@ describe("ClubhouseMain", function () {
     async function deployFixtures() {
         // Deploy the TMKOC ERC20 token
         const TMKOC = await ethers.getContractFactory("TaarakMehtaKaOoltahChashmash");
-        const tmkoc = await TMKOC.deploy("TaarakMehtaKaOoltah", "TMKOC", ethers.parseEther("1000000"));
+        const tmkoc = await TMKOC.deploy("TaarakMehtaKaOoltahChashmah", "TMKOC", ethers.parseEther("1000000"));
 
         // Deploy the ClubhouseVault contract
         const Vault = await ethers.getContractFactory("ClubhouseMain");
