@@ -15,7 +15,7 @@ if (!PRIVATE_KEY) {
 const RPC_URL = "https://rpc-amoy.polygon.technology";
 
 // Address of the deployed contract
-const CONTRACT_ADDRESS = "0xC67f34dfee3A6869cB7CBD15b65914414202623c";
+const CONTRACT_ADDRESS = "0xdce77344d59fEF3f96587eA6244674CcEa21d2B9";
 if (!CONTRACT_ADDRESS) throw "⛔️ Provide a valid contract address!";
 
 console.log("📡 Connecting to Polygon Amoy Testnet...");

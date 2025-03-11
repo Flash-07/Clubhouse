@@ -7,6 +7,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import "hardhat/console.sol";
 
 /// @title ClubhouseVault
 /// @author Neela Mediatech Private Limited
@@ -150,6 +151,8 @@ contract ClubhouseMain is ReentrancyGuard, Ownable, Pausable {
 
     /// @notice Deposits tokens using a meta transaction
     /// @dev The backend relayer submits this on behalf of the user
+    /// @notice Deposits tokens using a meta transaction
+    /// @dev The backend relayer submits this on behalf of the user
     function depositWithMetaTx(
         address user,
         uint256 amount,
@@ -160,18 +163,41 @@ contract ClubhouseMain is ReentrancyGuard, Ownable, Pausable {
     ) external nonReentrant whenNotPaused {
         require(msg.sender == trustedSigner, "Only relayer can call");
 
-        // Call permit function in TMKOC token
+        // Debug: Log critical values before calling `permit`
+        console.log("depositWithMetaTx Debug:");
+        console.log("User Address:", user);
+        console.log("Amount:", amount);
+        console.log("Vault Address:", address(this));
+        console.log("Trusted Signer:", trustedSigner);
+        console.log("Deadline:", deadline);
+
+        // ✅ Call permit function
+        console.log("Calling permit...");
         tmkocPermitToken.permit(user, address(this), amount, deadline, v, r, s);
 
-        // Transfer tokens from user to vault
-        bool success = IERC20(address(tmkocToken)).transferFrom(
-            user,
-            address(this),
-            amount
+        // Debug: Log Allowance
+        uint256 allowanceAfter = tmkocToken.allowance(user, address(this));
+        console.log("Allowance After Permit:", allowanceAfter);
+
+        require(
+            allowanceAfter >= amount,
+            "Allowance not updated after permit"
         );
+
+        // Debug: Check user balance before transfer
+        uint256 userBalance = tmkocToken.balanceOf(user);
+        console.log("User Balance Before Transfer:", userBalance);
+
+        require(userBalance >= amount, "User does not have enough balance");
+
+        // ✅ Attempt Transfer
+        console.log("Transferring tokens...");
+        bool success = tmkocToken.transferFrom(user, address(this), amount);
+        console.log("Transfer Success:", success);
         require(success, "Transfer failed");
 
         emit TokensDeposited(user, amount);
+        console.log("DepositWithMetaTx executed successfully!");
     }
 
     /// @notice Collects tournament fees into the contract

@@ -1,6 +1,3 @@
 {
-  "ClubhouseVaultModule#ClubhouseVault": "0xcD94BB51891DD3600D9520A3cb34Ba06CEb45A88",
-  "TMKOCModule#TaarakMehtaKaOoltahChashmash": "0x9ffd281286450cF2b7e20dC057b04cb7eB18D604",
-  "TMKOCAndClubhouseModule#TaarakMehtaKaOoltahChashmash": "0x554B47F324bf8Dc0e9cCF82B16c2DdA21befFE86",
-  "TMKOCAndClubhouseModule#ClubhouseMain": "0xC67f34dfee3A6869cB7CBD15b65914414202623c"
+  "ClubhouseMainModule#ClubhouseMain": "0xdce77344d59fEF3f96587eA6244674CcEa21d2B9"
 }
