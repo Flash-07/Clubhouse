@@ -1,96 +1,70 @@
-import * as hre from "hardhat";
-// import { getWallet } from "./utils";
 import { ethers } from "ethers";
 import dotenv from "dotenv";
+import * as hre from "hardhat";
 
-// Load env file
 dotenv.config();
 
-//Private key
-const PRIVATE_KEY = process.env.PRIVATE_KEY; // Never share your private key
-if (!PRIVATE_KEY) {
-    throw new Error("Private key must be provided");
+// Environment variables
+const { WALLET_PRIVATE_KEY } = process.env;
+const RPC_URL = "https://rpc-amoy.polygon.technology"; // Polygon Amoy Testnet RPC
+const CONTRACT_ADDRESS = "0x554b47f324bf8dc0e9ccf82b16c2dda21beffe86"; // TMKOC Token Contract
+
+if (!WALLET_PRIVATE_KEY) {
+    throw new Error("Private key must be provided in the .env file!");
 }
 
-// Address of the contract to interact with
-const CONTRACT_ADDRESS = "0xA9Bb779d5b0267c16B54CB65b6AF921D63507D8A";
-console.log("Interacting contract: ", CONTRACT_ADDRESS)
-if (!CONTRACT_ADDRESS) throw "⛔️ Provide address of the contract to interact with!";
-
-// Function to create a wallet from a private key
-function getWallet() {
-    return new ethers.Wallet("PRIVATE_KEY", ethers.getDefaultProvider());
+if (!CONTRACT_ADDRESS) {
+    throw new Error("Contract address must be specified!");
 }
 
-// An example of a script to interact with the contract
+// Initialize provider and wallet
+const provider = new ethers.JsonRpcProvider(RPC_URL);
+const wallet = new ethers.Wallet(WALLET_PRIVATE_KEY, provider);
+
+// Async function to interact with the contract
 export default async function interactWithContract() {
-  console.log(`Running script to interact with contract ${CONTRACT_ADDRESS}`);
+    console.log(`Running script to interact with contract ${CONTRACT_ADDRESS}`);
 
-  // Load wallet for contract interaction
-  const wallet = getWallet();
-  const walletAddress = await wallet.getAddress(); // Get the wallet address
-  console.log("Wallet address:", walletAddress);
+    const walletAddress = await wallet.getAddress();
+    console.log("Wallet address:", walletAddress);
 
-  // Load compiled contract info
-  const contractArtifact = await hre.artifacts.readArtifact("TaarakMehtaKaOoltahChashmash");
-  console.log("Contract ABI:", contractArtifact.abi);
+    // Load compiled contract info
+    const contractArtifact = await hre.artifacts.readArtifact("TaarakMehtaKaOoltahChashmash");
 
-  // Initialize contract instance for interaction
-  const tokenContract = new ethers.Contract(
-    CONTRACT_ADDRESS,
-    contractArtifact.abi,
-    wallet // Interact with the contract on behalf of this wallet
-  );
+    // Initialize contract instance for interaction
+    const tokenContract = new ethers.Contract(CONTRACT_ADDRESS, contractArtifact.abi, wallet);
 
-  console.log("tokenContract initialized:", tokenContract.address);
+    console.log("Token contract initialized at:", tokenContract.address);
 
-  // // Check the balance of the wallet before the transfer
-  // const walletAddress = await wallet.getAddress();
-  // try {
-  //   const balanceBefore = await tokenContract.balanceOf(walletAddress);
-  //   console.log(`Current balance of ${walletAddress}: ${ethers.formatUnits(balanceBefore, 18)} tokens`);
-  // } catch (error) {
-  //   console.error("Error fetching balance:", error);
-  // }
+    // Define recipient address and transfer amount
+    const recipientAddress = "0xEA6B045B125752279487774a299621092591f7D7"; // Replace with recipient
+    const transferAmount = ethers.parseUnits("10000", 18); // 10,000 tokens
 
-  // Define recipient address and amount of tokens to transfer
-  const recipientAddress = "0x8E2E982c3066c3427B9FaddeA4b78a55346DC52A"; // Replace with recipient address
-  const transferAmount = ethers.parseUnits("1000", 18); // 1000 tokens to transfer (adjust decimals if needed)
+    console.log("🔹 Transfer Amount:", ethers.formatUnits(transferAmount, 18), "TMKOC");
 
-  // Convert BigInt to string
-  const transferAmountString = transferAmount.toString();
-  console.log("transferAmountString", transferAmountString);
+    try {
+        // Execute token transfer
+        console.log("Sending transfer transaction...");
+        const transferTx = await tokenContract.transfer(recipientAddress, transferAmount);
+        console.log(`Transaction submitted: ${transferTx.hash}`);
 
-  // // Execute the transfer
-  // const transferTx = await tokenContract.transfer(recipientAddress, transferAmountString);
-  // console.log(`Transaction hash of token transfer: ${transferTx.hash}`);
+        // Wait for transaction confirmation
+        const receipt = await transferTx.wait();
+        console.log(`Transaction confirmed in block: ${receipt.blockNumber}`);
 
-  // // Wait until the transaction is processed
-  // await transferTx.wait();
-
-  // Execute the transfer
-  try {
-    const transferTx = await tokenContract.transfer(recipientAddress, transferAmount);
-    console.log(`Transaction hash of token transfer: ${transferTx.hash}`);
-
-    // Wait until the transaction is processed
-    await transferTx.wait();
-
-    // // Check the balance of the wallet after the transfer
-    // const balanceAfter = await tokenContract.balanceOf(walletAddress);
-    // console.log(`Balance of ${walletAddress} after transfer: ${ethers.formatUnits(balanceAfter, 18)} tokens`);
-  } catch (error) {
-    console.error("Error during transfer:", error);
-  }
-
-  // // Check the balance of the wallet after the transfer
-  // const balanceAfter = await tokenContract.balanceOf(walletAddress);
-  // console.log(`Balance of ${walletAddress} after transfer: ${ethers.formatUnits(balanceAfter, 18)} tokens`);
-  // Check the balance of the wallet after the transfer
+        // Log transaction details
+        console.log("\n Transaction Receipt:");
+        console.log(`- From: ${receipt.from}`);
+        console.log(`- To: ${receipt.to}`);
+        console.log(`- Gas Used: ${receipt.gasUsed.toString()}`);
+        console.log(`- Status: ${receipt.status === 1 ? "Success" : "❌ Failed"}`);
+    } catch (error) {
+        console.error("Error during transfer:", error);
+    }
 }
 
-// Ensure the function is called when the script is executed
+// Run the interaction script
 interactWithContract().catch((error) => {
-  console.error("Error interacting with the contract:", error);
-  process.exit(1);
+    console.error("Error interacting with the contract:", error);
+    process.exit(1);
 });
