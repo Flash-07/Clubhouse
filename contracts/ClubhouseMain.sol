@@ -420,6 +420,40 @@ contract ClubhouseMain is ReentrancyGuard, Ownable, Pausable {
         emit TournamentFeesWithdrawn(to, amount);
     }
 
+        /// @notice Allows the owner to batch withdraw tokens to multiple users
+    /// @dev This function performs multiple `withdrawToUser` actions in a single transaction.
+    /// It validates all inputs and ensures the contract has sufficient balance.
+    /// Emits one WithdrawalWithSignature event per user.
+    /// @param recipients Array of recipient addresses
+    /// @param amounts Array of amounts corresponding to each recipient
+    function batchWithdrawToUsers(
+        address[] calldata recipients,
+        uint256[] calldata amounts
+    ) external onlyOwner nonReentrant whenNotPaused {
+        require(recipients.length > 0, "No recipients provided");
+        require(recipients.length == amounts.length, "Mismatched input lengths");
+
+        uint256 totalAmount = 0;
+
+        for (uint256 i = 0; i < recipients.length; i++) {
+            require(recipients[i] != address(0), "Invalid recipient address");
+            require(amounts[i] > 0, "Amount must be > 0");
+            totalAmount += amounts[i];
+        }
+
+        require(
+            tmkocToken.balanceOf(address(this)) >= totalAmount,
+            "Insufficient contract balance"
+        );
+
+        for (uint256 i = 0; i < recipients.length; i++) {
+            bool success = tmkocToken.transfer(recipients[i], amounts[i]);
+            require(success, "Transfer failed");
+
+            emit WithdrawalWithSignature(recipients[i], amounts[i], 0);
+        }
+    }
+
     /// @notice Pauses the contract
     /// @dev This function disables critical operations by activating the Pausable mechanism.
     /// Only callable by the contract owner.

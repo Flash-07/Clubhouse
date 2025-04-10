@@ -37,8 +37,8 @@ export default async function interactWithContract() {
     console.log("Token contract initialized at:", tokenContract.address);
 
     // Define recipient address and transfer amount
-    const recipientAddress = "0xEA6B045B125752279487774a299621092591f7D7"; // Replace with recipient
-    const transferAmount = ethers.parseUnits("10000", 18); // 10,000 tokens
+    const recipientAddress = "0xF0b997a3d3667aa263625a5bD2B0BBd43494a6Ea"; // Replace with recipient
+    const transferAmount = ethers.parseUnits("1000", 18); // 10,000 tokens
 
     console.log("🔹 Transfer Amount:", ethers.formatUnits(transferAmount, 18), "TMKOC");
 
@@ -57,7 +57,7 @@ export default async function interactWithContract() {
         console.log(`- From: ${receipt.from}`);
         console.log(`- To: ${receipt.to}`);
         console.log(`- Gas Used: ${receipt.gasUsed.toString()}`);
-        console.log(`- Status: ${receipt.status === 1 ? "Success" : "❌ Failed"}`);
+        console.log(`- Status: ${receipt.status === 1 ? "Success" : "Failed"}`);
     } catch (error) {
         console.error("Error during transfer:", error);
     }
